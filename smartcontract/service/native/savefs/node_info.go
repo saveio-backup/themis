@@ -18,10 +18,13 @@
 package savefs
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
 	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/errors"
+	"github.com/saveio/themis/smartcontract/service/native"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
 
@@ -158,5 +161,37 @@ func (this *FsNodesInfo) Deserialize(r io.Reader) error {
 		}
 		this.NodeInfo = append(this.NodeInfo, nodeInfo)
 	}
+	return nil
+}
+
+func getFsNodeInfo(native *native.NativeService, walletAddr common.Address) (*FsNodeInfo, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	fsNodeInfoKey := GenFsNodeInfoKey(contract, walletAddr)
+	item, err := utils.GetStorageItem(native, fsNodeInfoKey)
+	if err != nil {
+		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[FS Govern] FsNodeInfo GetStorageItem error!")
+	}
+	if item == nil {
+		return nil, errors.NewErr("[FS Govern] FsNodeInfo not found!")
+	}
+	var fsNodeInfo FsNodeInfo
+	fsNodeInfoSource := common.NewZeroCopySource(item.Value)
+	err = fsNodeInfo.Deserialization(fsNodeInfoSource)
+	if err != nil {
+		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[FS Govern] FsNodeInfo deserialize error!")
+	}
+	return &fsNodeInfo, nil
+}
+
+func setFsNodeInfo(native *native.NativeService, fsNodeInfo *FsNodeInfo) error {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	fsNodeInfoKey := GenFsNodeInfoKey(contract, fsNodeInfo.WalletAddr)
+	info := new(bytes.Buffer)
+	if err := fsNodeInfo.Serialize(info); err != nil {
+		return errors.NewErr("[FS Govern] FsNodeInfo serialize error!")
+	}
+	utils.PutBytes(native, fsNodeInfoKey, info.Bytes())
 	return nil
 }

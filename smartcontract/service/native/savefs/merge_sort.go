@@ -31,21 +31,6 @@ func merge(l []*SectorFileInfo, r []*SectorFileInfo) []*SectorFileInfo {
 	return result
 }
 
-/*
-func mergeSort(list []*SectorFileInfo) []*SectorFileInfo {
-	switch len(list) {
-	case 0:
-		return list
-	case 1:
-		return list
-	default:
-		m := len(list) / 2
-		l := list[:m]
-		r := list[m:]
-		return merge(mergeSort(l), mergeSort(r))
-	}
-}
-*/
 func mergeSortSectorFileInfo(native *native.NativeService, nodeAddr common.Address, sectorID uint64) ([]*SectorFileInfo, error) {
 	groupNum, err := getSectorFileInfoGroupNum(native, nodeAddr, sectorID)
 	if err != nil {

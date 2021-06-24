@@ -18,10 +18,13 @@
 package savefs
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
 	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/errors"
+	"github.com/saveio/themis/smartcontract/service/native"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
 
@@ -153,39 +156,67 @@ func (this *FsSetting) Deserialization(source *common.ZeroCopySource) error {
 	return err
 }
 
-type StorageFee struct {
-	TxnFee        uint64
-	SpaceFee      uint64
-	ValidationFee uint64
+func getFsSetting(native *native.NativeService) (*FsSetting, error) {
+	var fsSetting FsSetting
+	contract := native.ContextRef.CurrentContext().ContractAddress
+	fsSettingKey := GenFsSettingKey(contract)
+
+	item, err := utils.GetStorageItem(native, fsSettingKey)
+	if err != nil {
+		return nil, errors.NewErr("[FS Init] GetFsSetting error!")
+	}
+	if item == nil {
+		fsSetting = FsSetting{
+			FsGasPrice:         FS_GAS_PRICE,
+			GasPerGBPerBlock:   GAS_PER_GB_PER_Block,
+			GasPerKBForRead:    GAS_PER_KB_FOR_READ,
+			GasForChallenge:    GAS_FOR_CHALLENGE,
+			MaxProveBlockNum:   MAX_PROVE_BLOCKS,
+			MinVolume:          MIN_VOLUME, //1G
+			DefaultProvePeriod: DEFAULT_PROVE_PERIOD,
+			DefaultProveLevel:  DeFAULT_PROVE_LEVEL,
+			DefaultCopyNum:     DEFAULT_COPY_NUM,
+		}
+		return &fsSetting, nil
+	}
+
+	settingSource := common.NewZeroCopySource(item.Value)
+	if err := fsSetting.Deserialization(settingSource); err != nil {
+		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[FS Init] FsSetting Deserialization error!")
+	}
+	return &fsSetting, nil
 }
 
-func (f *StorageFee) Sum() uint64 {
-	return f.TxnFee + f.SpaceFee + f.ValidationFee
+func setFsSetting(native *native.NativeService, fsSetting FsSetting) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	info := new(bytes.Buffer)
+	fsSetting.Serialize(info)
+
+	fsSettingKey := GenFsSettingKey(contract)
+	utils.PutBytes(native, fsSettingKey, info.Bytes())
 }
 
-func (this *StorageFee) Serialize(w io.Writer) error {
-	if err := utils.WriteVarUint(w, this.TxnFee); err != nil {
-		return fmt.Errorf("[StorageFee] [TxnFee:%v] serialize from error:%v", this.TxnFee, err)
+// get Fs setting with provided prove level, now prove level only impact the prove interval
+func getFsSettingWithProveLevel(native *native.NativeService, proveLevel uint64) (*FsSetting, error) {
+	fsSetting, err := getFsSetting(native)
+	if err != nil {
+		return nil, err
 	}
-	if err := utils.WriteVarUint(w, this.SpaceFee); err != nil {
-		return fmt.Errorf("[StorageFee] [SpaceFee:%v] serialize from error:%v", this.SpaceFee, err)
-	}
-	if err := utils.WriteVarUint(w, this.ValidationFee); err != nil {
-		return fmt.Errorf("[StorageFee] [ValidationFee:%v] serialize from error:%v", this.ValidationFee, err)
-	}
-	return nil
+
+	fsSetting.DefaultProvePeriod = GetProveIntervalByProveLevel(proveLevel)
+	return fsSetting, nil
 }
 
-func (this *StorageFee) Deserialize(r io.Reader) error {
-	var err error
-	if this.TxnFee, err = utils.ReadVarUint(r); err != nil {
-		return fmt.Errorf("[StorageFee] [TxnFee] Deserialize from error:%v", err)
+func GetProveIntervalByProveLevel(proveLevel uint64) uint64 {
+	switch proveLevel {
+	case PROVE_LEVEL_HIGH:
+		return PROVE_PERIOD_HIGHT
+	case PROVE_LEVEL_MEDIEUM:
+		return PROVE_PERIOD_MEDIEUM
+	case PROVE_LEVEL_LOW:
+		return PROVE_PERIOD_LOW
+	default:
+		return PROVE_PERIOD_HIGHT
 	}
-	if this.SpaceFee, err = utils.ReadVarUint(r); err != nil {
-		return fmt.Errorf("[StorageFee] [SpaceFee] Deserialize from error:%v", err)
-	}
-	if this.ValidationFee, err = utils.ReadVarUint(r); err != nil {
-		return fmt.Errorf("[StorageFee] [ValidationFee] Deserialize from error:%v", err)
-	}
-	return nil
 }

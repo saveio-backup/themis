@@ -19,10 +19,13 @@
 package savefs
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
 	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/errors"
+	"github.com/saveio/themis/smartcontract/service/native"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
 
@@ -126,4 +129,55 @@ func (this *NodeList) Exist(addr common.Address) bool {
 		}
 	}
 	return false
+}
+
+func getFsNodeList(native *native.NativeService) (*NodeList, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	nodeSetKey := GenFsNodeSetKey(contract)
+	nodeSet, err := utils.GetStorageItem(native, nodeSetKey)
+	if err != nil {
+		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[FS Govern] GetStorageItem nodeSetKey error!")
+	}
+	if nodeSet == nil {
+		return nil, errors.NewErr("[FS Govern] FsGetNodeList No nodeSet found!")
+	}
+
+	var nodeList NodeList
+	reader := bytes.NewReader(nodeSet.Value)
+	if err = nodeList.Deserialize(reader); err != nil {
+		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[FS Govern] Set deserialize error!")
+	}
+	return &nodeList, nil
+}
+
+func nodeListOperate(native *native.NativeService, walletAddr common.Address, isAdd bool) error {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	nodeSetKey := GenFsNodeSetKey(contract)
+	nodeSet, err := utils.GetStorageItem(native, nodeSetKey)
+	if err != nil {
+		return errors.NewDetailErr(err, errors.ErrNoCode, "[FS Govern] GetStorageItem nodeSetKey error!")
+	}
+
+	var nodeList NodeList
+	if nodeSet != nil {
+		reader := bytes.NewReader(nodeSet.Value)
+		if err = nodeList.Deserialize(reader); err != nil {
+			return errors.NewDetailErr(err, errors.ErrNoCode, "[FS Govern] Set deserialize error!")
+		}
+	}
+
+	if isAdd {
+		nodeList.Add(walletAddr)
+	} else {
+		nodeList.Del(walletAddr)
+	}
+	bf := new(bytes.Buffer)
+	err = nodeList.Serialize(bf)
+	if err != nil {
+		return errors.NewDetailErr(err, errors.ErrNoCode, "[FS Govern] Put node to set error!")
+	}
+	utils.PutBytes(native, nodeSetKey, bf.Bytes())
+	return nil
 }

@@ -26,6 +26,9 @@ import (
 
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/log"
+	"github.com/saveio/themis/errors"
+	"github.com/saveio/themis/smartcontract/service/native"
+	"github.com/saveio/themis/smartcontract/service/native/usdt"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
 
@@ -318,4 +321,23 @@ func GenFsSectorFileInfoGroupNumKey(contract common.Address, nodeAddr common.Add
 	key = append(key[:], nodeAddr[:]...)
 	key = append(key[:], util.Int64ToBytes(sectorID)...)
 	return key
+}
+
+func appCallTransfer(native *native.NativeService, contract common.Address, from common.Address, to common.Address, amount uint64) error {
+	var sts []usdt.State
+	sts = append(sts, usdt.State{
+		From:  from,
+		To:    to,
+		Value: amount,
+	})
+	transfers := usdt.Transfers{
+		States: sts,
+	}
+	sink := common.NewZeroCopySink(nil)
+	transfers.Serialization(sink)
+
+	if _, err := native.NativeCall(contract, "transfer", sink.Bytes()); err != nil {
+		return errors.NewDetailErr(err, errors.ErrNoCode, "appCallTransfer, appCall error!")
+	}
+	return nil
 }

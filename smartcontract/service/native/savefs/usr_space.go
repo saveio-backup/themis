@@ -18,11 +18,14 @@
 package savefs
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/serialization"
+	"github.com/saveio/themis/errors"
+	"github.com/saveio/themis/smartcontract/service/native"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
 
@@ -223,4 +226,34 @@ func (this *UserSpaceParams) Deserialization(source *common.ZeroCopySource) erro
 		return err
 	}
 	return err
+}
+
+func getUserSpace(native *native.NativeService, addr common.Address) (*UserSpace, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	userSpaceKey := GenFsUserSpaceKey(contract, addr)
+	userSpaceItem, err := utils.GetStorageItem(native, userSpaceKey)
+	if err != nil || userSpaceItem == nil {
+		return nil, errors.NewErr("Userspace not found!")
+	}
+
+	var userspace UserSpace
+	reader := bytes.NewReader(userSpaceItem.Value)
+	err = userspace.Deserialize(reader)
+	if err != nil {
+		return nil, errors.NewErr("GetUserSpace deserialize error!")
+	}
+
+	return &userspace, nil
+}
+func setUserSpace(native *native.NativeService, userspace *UserSpace, addr common.Address) error {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	bf := new(bytes.Buffer)
+	if err := userspace.Serialize(bf); err != nil {
+		return errors.NewErr("Userspace serialize error!")
+	}
+	userSpaceKey := GenFsUserSpaceKey(contract, addr)
+	utils.PutBytes(native, userSpaceKey, bf.Bytes())
+	return nil
 }

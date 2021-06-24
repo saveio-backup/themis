@@ -18,11 +18,13 @@
 package savefs
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/log"
+	"github.com/saveio/themis/errors"
 	"github.com/saveio/themis/smartcontract/service/native"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
@@ -411,6 +413,45 @@ func (this *FileInfoList) Deserialize(r io.Reader) error {
 	}
 	return nil
 
+}
+func getFsFileInfo(native *native.NativeService, fileHash []byte) (*FileInfo, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+	fileInfoKey := GenFsFileInfoKey(contract, fileHash)
+	item, err := utils.GetStorageItem(native, fileInfoKey)
+	if err != nil {
+		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[FS Profit] FsFileInfo GetStorageItem error!")
+	}
+	if item == nil {
+		return nil, errors.NewErr("[FS Profit] FsFileInfo not found!")
+	}
+
+	var fsFileInfo FileInfo
+	fsFileInfoSource := common.NewZeroCopySource(item.Value)
+	err = fsFileInfo.Deserialization(fsFileInfoSource)
+	if err != nil {
+		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[FS Profit] FsFileInfo deserialize error!")
+	}
+	return &fsFileInfo, nil
+}
+
+func setFsFileInfo(native *native.NativeService, fileInfo *FileInfo) error {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	bf := new(bytes.Buffer)
+	if err := fileInfo.Serialize(bf); err != nil {
+		return errors.NewErr("[FS Profit] FsFileInfo serialize error!")
+	}
+	fileInfoKey := GenFsFileInfoKey(contract, fileInfo.FileHash)
+	utils.PutBytes(native, fileInfoKey, bf.Bytes())
+
+	return nil
+}
+
+func deleteFsFileInfo(native *native.NativeService, fileHash []byte) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	fileInfoKey := GenFsFileInfoKey(contract, fileHash)
+	utils.DelStorageItem(native, fileInfoKey)
 }
 
 func addSectorRefForFileInfo(native *native.NativeService, fileInfo *FileInfo, sectorInfo *SectorInfo) error {

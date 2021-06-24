@@ -20,7 +20,6 @@ package savefs
 
 import (
 	"bytes"
-	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"time"
@@ -114,6 +113,11 @@ func FsStoreFile(native *native.NativeService) ([]byte, error) {
 	if err = fileInfo.Deserialize(reader); err != nil {
 		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] FsStoreFile DecodeBytes error!")
 	}
+
+	if !native.ContextRef.CheckWitness(fileInfo.FileOwner) {
+		return utils.BYTE_FALSE, errors.NewErr("FS Profit] CheckWitness failed!")
+	}
+
 	fileInfoKey := GenFsFileInfoKey(contract, fileInfo.FileHash)
 	item, err := utils.GetStorageItem(native, fileInfoKey)
 	if err != nil {
@@ -121,6 +125,10 @@ func FsStoreFile(native *native.NativeService) ([]byte, error) {
 	}
 	if item != nil {
 		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] File have stored!")
+	}
+
+	if fileInfo.ExpiredHeight <= uint64(native.Height) {
+		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] Wrong expire height!")
 	}
 
 	switch fileInfo.ProveLevel {
@@ -135,10 +143,6 @@ func FsStoreFile(native *native.NativeService) ([]byte, error) {
 	fsSetting, err := getFsSettingWithProveLevel(native, fileInfo.ProveLevel)
 	if err != nil {
 		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] FsStoreFile getFsSettingWithProveLevel error!")
-	}
-
-	if !native.ContextRef.CheckWitness(fileInfo.FileOwner) {
-		return utils.BYTE_FALSE, errors.NewErr("FS Profit] CheckWitness failed!")
 	}
 
 	fileInfo.ValidFlag = true
@@ -157,14 +161,11 @@ func FsStoreFile(native *native.NativeService) ([]byte, error) {
 		fileInfo.FileBlockSize, fsSetting.GasPerKBForRead, fsSetting.GasForChallenge, fileInfo.ProveTimes, fsSetting.FsGasPrice, fileInfo.CopyNum, fileInfo.Deposit)
 
 	if fileInfo.StorageType == FileStorageTypeUseSpace {
-		userSpaceKey := GenFsUserSpaceKey(contract, fileInfo.FileOwner)
-		userSpaceItem, err := utils.GetStorageItem(native, userSpaceKey)
-		if err != nil || userSpaceItem == nil {
-			return utils.BYTE_FALSE, errors.NewErr("FS Profit] Userspace not found!")
+		userspace, err := getUserSpace(native, fileInfo.FileOwner)
+		if err != nil {
+			return utils.BYTE_FALSE, errors.NewErr("FS Profit] GetUserSpace error!")
 		}
-		reader := bytes.NewReader(userSpaceItem.Value)
-		userspace := &UserSpace{}
-		userspace.Deserialize(reader)
+
 		if userspace.Balance < fileInfo.Deposit {
 			return utils.BYTE_FALSE, errors.NewErr("FS Profit] Userspace insufficient balance!")
 		}
@@ -176,16 +177,15 @@ func FsStoreFile(native *native.NativeService) ([]byte, error) {
 		if userspace.ExpireHeight < fileInfo.ExpiredHeight {
 			return utils.BYTE_FALSE, errors.NewErr("FS Profit] Userspace insufficient remain storage!")
 		}
+
 		log.Debugf("userspace store file: %v, fileinfo: %v", userspace, fileInfo)
 		userspace.Balance -= fileInfo.Deposit
 		userspace.Remain -= fileInfo.FileBlockNum * fileInfo.FileBlockSize
 		userspace.Used += fileInfo.FileBlockNum * fileInfo.FileBlockSize
-		usbf := new(bytes.Buffer)
-		if err = userspace.Serialize(usbf); err != nil {
-			return utils.BYTE_FALSE, errors.NewErr("[FS Profit] FsManageUserSpace userspace serialize error!")
+
+		if err = setUserSpace(native, userspace, fileInfo.FileOwner); err != nil {
+			return utils.BYTE_FALSE, errors.NewErr("[FS Profit] SetUserSpace error!")
 		}
-		log.Debugf("put user space %s, len:%d\n", hex.EncodeToString(userSpaceKey), len(usbf.Bytes()))
-		utils.PutBytes(native, userSpaceKey, usbf.Bytes())
 	} else {
 		log.Debugf("use transfer\n")
 		err = appCallTransfer(native, utils.UsdtContractAddress, fileInfo.FileOwner, contract, fileInfo.Deposit)
@@ -198,11 +198,9 @@ func FsStoreFile(native *native.NativeService) ([]byte, error) {
 	fileInfo.ProveBlockNum = fsSetting.MaxProveBlockNum
 	fileInfo.BlockHeight = uint64(native.Height)
 
-	bf := new(bytes.Buffer)
-	if err = fileInfo.Serialize(bf); err != nil {
-		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] FsStoreFile fileInfo serialize error!")
+	if err = setFsFileInfo(native, &fileInfo); err != nil {
+		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] FsStoreFile setFsFileInfo error!")
 	}
-	utils.PutBytes(native, fileInfoKey, bf.Bytes())
 
 	if err = AddFileToList(native, fileInfo.FileOwner, fileInfo.FileHash); err != nil {
 		return utils.BYTE_FALSE, err
@@ -242,6 +240,10 @@ func FsFileRenew(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] FsFileRenew deserialize error!")
 	}
 
+	if !native.ContextRef.CheckWitness(fileReNew.FromAddr) {
+		return utils.BYTE_FALSE, errors.NewErr("FS Profit] FsFileRenew CheckWitness failed!")
+	}
+
 	fsSetting, err := getFsSetting(native)
 	if err != nil {
 		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] FsFileRenew getFsSetting error!")
@@ -253,7 +255,7 @@ func FsFileRenew(native *native.NativeService) ([]byte, error) {
 	}
 
 	if fileInfo.StorageType != FileStorageTypeCustom {
-		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] wrong stroage type!")
+		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] wrong storage type!")
 	}
 
 	if uint64(native.Height) > fileInfo.ExpiredHeight {
@@ -263,9 +265,6 @@ func FsFileRenew(native *native.NativeService) ([]byte, error) {
 	totalRenew := calcFee(fsSetting, fileReNew.ReNewTimes, fileInfo.CopyNum, fileInfo.FileBlockNum*fileInfo.FileBlockSize, fileReNew.ReNewTimes*fileInfo.ProveInterval)
 	reNewFee := totalRenew.ValidationFee + totalRenew.SpaceFee
 
-	if !native.ContextRef.CheckWitness(fileReNew.FromAddr) {
-		return utils.BYTE_FALSE, errors.NewErr("FS Profit] FsFileRenew CheckWitness failed!")
-	}
 	err = appCallTransfer(native, utils.UsdtContractAddress, fileReNew.FromAddr, contract, reNewFee)
 	if err != nil {
 		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] AppCallTransfer, transfer error!")
@@ -301,22 +300,23 @@ func FsGetFileList(native *native.NativeService) ([]byte, error) {
 }
 
 func FsGetFileInfo(native *native.NativeService) ([]byte, error) {
-	contract := native.ContextRef.CurrentContext().ContractAddress
-
 	source := common.NewZeroCopySource(native.Input)
 	fileHash, err := utils.DecodeBytes(source)
 	if err != nil {
 		return EncRet(false, []byte("[FS Profit] FsGetFileInfo DecodeBytes error!")), nil
 	}
-	fileInfoKey := GenFsFileInfoKey(contract, fileHash)
-	item, err := utils.GetStorageItem(native, fileInfoKey)
+
+	fileInfo, err := getFsFileInfo(native, fileHash)
 	if err != nil {
-		return EncRet(false, []byte("[FS Profit] FsGetFileInfo GetStorageItem error!")), nil
+		return EncRet(false, []byte("[FS Profit] FsGetFileInfo getFsFileInfo error!")), nil
 	}
-	if item == nil {
-		return EncRet(false, []byte("[FS Profit] FsGetFileInfo not found!")), nil
+	bf := new(bytes.Buffer)
+	err = fileInfo.Serialize(bf)
+	if err != nil {
+		return EncRet(false, []byte("[FS Profit] FsGetFileInfo FileInfo serialize error!")), nil
 	}
-	return EncRet(true, item.Value), nil
+
+	return EncRet(true, bf.Bytes()), nil
 }
 
 func FsGetFileInfos(native *native.NativeService) ([]byte, error) {
@@ -399,23 +399,23 @@ func FsGetWhiteList(native *native.NativeService) ([]byte, error) {
 }
 
 func FsGetFileProveDetails(native *native.NativeService) ([]byte, error) {
-	contract := native.ContextRef.CurrentContext().ContractAddress
-
 	source := common.NewZeroCopySource(native.Input)
 	fileHash, err := utils.DecodeBytes(source)
 	if err != nil {
 		return EncRet(false, []byte("[FS Profit] FsGetFileProveDetails DecodeBytes error!")), nil
 	}
 
-	fileProveDetailKey := GenFsProveDetailsKey(contract, fileHash)
-	item, err := utils.GetStorageItem(native, fileProveDetailKey)
+	proveDetails, err := getProveDetailsWithNodeAddr(native, fileHash)
 	if err != nil {
-		return EncRet(false, []byte("[FS Profit] FsGetFileProveDetails GetStorageItem error!")), nil
+		return EncRet(false, []byte("[FS Profit] FsGetFileProveDetails GetProveDetails error!")), nil
 	}
-	if item == nil {
-		return EncRet(false, []byte("[FS Profit] FsGetFileProveDetails not found!")), nil
+
+	bf := new(bytes.Buffer)
+	err = proveDetails.Serialize(bf)
+	if err != nil {
+		return EncRet(false, []byte("[FS Profit] FsGetFileProveDetails ProveDetails Serialize error!")), nil
 	}
-	return EncRet(true, item.Value), nil
+	return EncRet(true, bf.Bytes()), nil
 }
 
 func FsDeleteFile(native *native.NativeService) ([]byte, error) {
@@ -500,7 +500,7 @@ func FsGetUnProvePrimaryFiles(native *native.NativeService) ([]byte, error) {
 	}
 	var unProveList FileList
 	for _, hash := range fileList.List {
-		proveDetail, err := getFsFileProveDetails(native, hash.Hash)
+		proveDetail, err := getProveDetails(native, hash.Hash)
 		if err != nil || len(proveDetail.ProveDetails) == 0 {
 			continue
 		}
@@ -537,7 +537,7 @@ func FsGetUnProveCandidateFiles(native *native.NativeService) ([]byte, error) {
 	}
 	var unProveList FileList
 	for _, hash := range fileList.List {
-		proveDetail, err := getFsFileProveDetails(native, hash.Hash)
+		proveDetail, err := getProveDetails(native, hash.Hash)
 		if err != nil || len(proveDetail.ProveDetails) == 0 {
 			continue
 		}
@@ -569,6 +569,15 @@ func deleteFiles(native *native.NativeService, fileInfos []*FileInfo) error {
 	refundAmount := uint64(0)
 	fileOwner := fileInfos[0].FileOwner
 
+	if !native.ContextRef.CheckWitness(fileOwner) {
+		return errors.NewErr("[FS Profit] FsDeleteFile CheckWitness failed!")
+	}
+
+	fsSetting, err := getFsSetting(native)
+	if err != nil {
+		return errors.NewErr("[FS Profit] FsDeleteFile getFsSetting error!")
+	}
+
 	for _, fileInfo := range fileInfos {
 		if fileInfo == nil {
 			return errors.NewErr("[FS Profit] FsDeleteFile fileInfo is nil")
@@ -576,10 +585,8 @@ func deleteFiles(native *native.NativeService, fileInfos []*FileInfo) error {
 		if fileInfo.FileOwner.ToBase58() != fileOwner.ToBase58() {
 			return errors.NewErr("[FS Profit] FsDeleteFile file owner are different!")
 		}
-		if !native.ContextRef.CheckWitness(fileInfo.FileOwner) {
-			return errors.NewErr("[FS Profit] FsDeleteFile CheckWitness failed!")
-		}
 	}
+
 	for _, fileInfo := range fileInfos {
 		fileHash := fileInfo.FileHash
 
@@ -596,93 +603,90 @@ func deleteFiles(native *native.NativeService, fileInfos []*FileInfo) error {
 		}
 
 		if fileInfo.Deposit == 0 {
-			fileInfoKey := GenFsFileInfoKey(contract, fileHash)
-			utils.DelStorageItem(native, fileInfoKey)
-
-			proveDetailsKey := GenFsProveDetailsKey(contract, fileHash)
-			utils.DelStorageItem(native, proveDetailsKey)
-			DelFileFromList(native, fileInfo.FileOwner, fileInfo.FileHash)
-			for _, primaryWalletAddr := range fileInfo.PrimaryNodes.AddrList {
-				DelFileFromPrimaryList(native, primaryWalletAddr, fileInfo.FileHash)
-			}
-
-			for _, candidateWalletAddr := range fileInfo.CandidateNodes.AddrList {
-				DelFileFromCandidateList(native, candidateWalletAddr, fileInfo.FileHash)
-			}
+			cleanupForDeleteFile(native, fileInfo)
 			continue
 		}
 
 		// fileInfo.deposit > 0
-		restProfit := fileInfo.Deposit
-		singleProveProfit := fileInfo.Deposit / (fileInfo.ProveTimes * (fileInfo.CopyNum + 1))
-
-		fileProveDetails, err := getFsFileProveDetails(native, fileHash)
+		fileProveDetails, err := getProveDetails(native, fileHash)
 		if err != nil {
-			return errors.NewErr("[FS Profit] FsDeleteFile GetFsFileProveDetails failed!")
+			return errors.NewErr("[FS Profit] FsDeleteFile GetProveDetails failed!")
 		}
+
+		restProfit := fileInfo.Deposit
+		fileSize := fileInfo.FileBlockNum * fileInfo.FileBlockSize
+		singleProveProfit := calcSingleValidFeeForFile(fsSetting, fileSize)
+
 		for i := 0; uint64(i) < fileProveDetails.ProveDetailNum; i++ {
-			profit := (fileProveDetails.ProveDetails[i].ProveTimes - 1) * singleProveProfit
 			fsNodeInfo, err := getFsNodeInfo(native, fileProveDetails.ProveDetails[i].WalletAddr)
 			if err != nil {
-				return errors.NewErr("[FS Profit] GetFsNodeInfo error!")
+				return errors.NewErr("[FS Profit] FsDeleteFile GetFsNodeInfo error!")
 			}
-			fsNodeInfo.Profit += profit
+
+			validProfit := (fileProveDetails.ProveDetails[i].ProveTimes - 1) * singleProveProfit
+			storageProfit := calcStorageFeeForOneNode(fsSetting, fileSize, uint64(native.Height)-fileInfo.BlockHeight)
+
+			totalProfit := validProfit + storageProfit
+
+			if totalProfit >= restProfit {
+				return errors.NewErr("[FS Profit] FsDeleteFile invalid profit")
+			}
+
+			fsNodeInfo.Profit += totalProfit
 
 			if err = setFsNodeInfo(native, fsNodeInfo); err != nil {
-				return errors.NewErr("[FS Profit] FsFileReadProfitSettle setFsNodeInfo error:" + err.Error())
+				return errors.NewErr("[FS Profit] FsDeleteFile setFsNodeInfo error:" + err.Error())
 			}
 
-			restProfit -= profit
+			restProfit -= totalProfit
 		}
 		if fileInfo.StorageType == FileStorageTypeCustom {
 			//give back remaining profit
 			refundAmount += restProfit
 		} else if fileInfo.StorageType == FileStorageTypeUseSpace {
-			userSpaceKey := GenFsUserSpaceKey(contract, fileInfo.FileOwner)
-			userSpaceItem, err := utils.GetStorageItem(native, userSpaceKey)
-			var userspace *UserSpace
-			if err == nil && userSpaceItem != nil {
-				reader := bytes.NewReader(userSpaceItem.Value)
-				userspace = &UserSpace{}
-				userspace.Deserialize(reader)
-				if userspace.Used >= fileInfo.FileBlockNum*fileInfo.FileBlockSize {
-					userspace.Balance += restProfit
-					userspace.Remain += fileInfo.FileBlockNum * fileInfo.FileBlockSize
-					userspace.Used -= fileInfo.FileBlockNum * fileInfo.FileBlockSize
-				} else {
-					log.Errorf("used is less than size %d %d", userspace.Used, fileInfo.FileBlockNum, fileInfo.FileBlockSize)
-				}
-				usbf := new(bytes.Buffer)
-				if err = userspace.Serialize(usbf); err != nil {
-					return errors.NewErr("[FS Profit] FsManageUserSpace userspace serialize error!")
-				}
-				utils.PutBytes(native, userSpaceKey, usbf.Bytes())
+			userspace, err := getUserSpace(native, fileInfo.FileOwner)
+			if err != nil {
+				return errors.NewErr("[FS Profit] FsDeleteFile GetUserSpace error!")
+			}
+			if userspace.Used >= fileInfo.FileBlockNum*fileInfo.FileBlockSize {
+				userspace.Balance += restProfit
+				userspace.Remain += fileInfo.FileBlockNum * fileInfo.FileBlockSize
+				userspace.Used -= fileInfo.FileBlockNum * fileInfo.FileBlockSize
+			} else {
+				log.Errorf("used is less than size %d %d", userspace.Used, fileInfo.FileBlockNum, fileInfo.FileBlockSize)
+				return errors.NewErr("[FS Profit] FsDeleteFile userspace value error!")
+			}
+			if err = setUserSpace(native, userspace, fileInfo.FileOwner); err != nil {
+				return errors.NewErr("[FS Profit] FsDeleteFile SetUserSpace error!")
 			}
 		}
-
-		fileInfoKey := GenFsFileInfoKey(contract, fileHash)
-		utils.DelStorageItem(native, fileInfoKey)
-
-		proveDetailsKey := GenFsProveDetailsKey(contract, fileHash)
-		utils.DelStorageItem(native, proveDetailsKey)
-		DelFileFromList(native, fileInfo.FileOwner, fileInfo.FileHash)
-		for _, primaryWalletAddr := range fileInfo.PrimaryNodes.AddrList {
-			DelFileFromPrimaryList(native, primaryWalletAddr, fileInfo.FileHash)
-		}
-		for _, candidateWalletAddr := range fileInfo.CandidateNodes.AddrList {
-			DelFileFromCandidateList(native, candidateWalletAddr, fileInfo.FileHash)
-		}
+		cleanupForDeleteFile(native, fileInfo)
 	}
 
 	if refundAmount == 0 {
 		return nil
 	}
-	err := appCallTransfer(native, utils.UsdtContractAddress, contract, fileOwner, refundAmount)
+	err = appCallTransfer(native, utils.UsdtContractAddress, contract, fileOwner, refundAmount)
 	if err != nil {
 		return errors.NewErr("[FS Profit] AppCallTransfer, transfer error!")
 	}
 
 	return nil
+}
+
+func cleanupForDeleteFile(native *native.NativeService, fileInfo *FileInfo) {
+	fileHash := fileInfo.FileHash
+
+	deleteFsFileInfo(native, fileHash)
+	deleteProveDetails(native, fileHash)
+
+	DelFileFromList(native, fileInfo.FileOwner, fileInfo.FileHash)
+	for _, primaryWalletAddr := range fileInfo.PrimaryNodes.AddrList {
+		DelFileFromPrimaryList(native, primaryWalletAddr, fileInfo.FileHash)
+	}
+	for _, candidateWalletAddr := range fileInfo.CandidateNodes.AddrList {
+		DelFileFromCandidateList(native, candidateWalletAddr, fileInfo.FileHash)
+	}
 }
 
 func FsChangeFileOwner(native *native.NativeService) ([]byte, error) {
@@ -693,7 +697,7 @@ func FsChangeFileOwner(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] FsChangeFileOwner OwnerChange Deserialization error!")
 	}
 
-	if native.ContextRef.CheckWitness(ownerChange.CurOwner) == false {
+	if !native.ContextRef.CheckWitness(ownerChange.CurOwner) {
 		return utils.BYTE_FALSE, errors.NewErr("authentication failed!")
 	}
 
@@ -732,7 +736,7 @@ func FsChangeFilePrivilege(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] FsChangeFilePrivilege GetFsFileInfo error!")
 	}
 
-	if native.ContextRef.CheckWitness(fileInfo.FileOwner) == false {
+	if !native.ContextRef.CheckWitness(fileInfo.FileOwner) {
 		return utils.BYTE_FALSE, errors.NewErr("authentication failed!")
 	}
 	fileInfo.Privilege = priChange.Privilege
@@ -741,57 +745,4 @@ func FsChangeFilePrivilege(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] FsChangeFilePrivilege setFsFileInfo error:" + err.Error())
 	}
 	return utils.BYTE_TRUE, nil
-}
-
-func getFsFileInfo(native *native.NativeService, fileHash []byte) (*FileInfo, error) {
-	contract := native.ContextRef.CurrentContext().ContractAddress
-	fileInfoKey := GenFsFileInfoKey(contract, fileHash)
-	item, err := utils.GetStorageItem(native, fileInfoKey)
-	if err != nil {
-		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[FS Profit] FsFileInfo GetStorageItem error!")
-	}
-	if item == nil {
-		return nil, errors.NewErr("[FS Profit] FsFileInfo not found!")
-	}
-
-	var fsFileInfo FileInfo
-	fsFileInfoSource := common.NewZeroCopySource(item.Value)
-	err = fsFileInfo.Deserialization(fsFileInfoSource)
-	if err != nil {
-		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[FS Profit] FsFileInfo deserialize error!")
-	}
-	return &fsFileInfo, nil
-}
-
-func setFsFileInfo(native *native.NativeService, fileInfo *FileInfo) error {
-	contract := native.ContextRef.CurrentContext().ContractAddress
-
-	bf := new(bytes.Buffer)
-	if err := fileInfo.Serialize(bf); err != nil {
-		return errors.NewErr("[FS Profit] FsFileInfo serialize error!")
-	}
-	fileInfoKey := GenFsFileInfoKey(contract, fileInfo.FileHash)
-	utils.PutBytes(native, fileInfoKey, bf.Bytes())
-
-	return nil
-}
-
-func getFsFileProveDetails(native *native.NativeService, fileHash []byte) (*FsProveDetails, error) {
-	contract := native.ContextRef.CurrentContext().ContractAddress
-	fileProveDetailsKey := GenFsProveDetailsKey(contract, fileHash)
-	item, err := utils.GetStorageItem(native, fileProveDetailsKey)
-	if err != nil {
-		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[FS Profit] FileProveDetails GetStorageItem error!")
-	}
-	if item == nil {
-		return nil, errors.NewErr("[FS Profit] FileProveDetails not found!")
-	}
-
-	var fsProveDetails FsProveDetails
-	reader := bytes.NewReader(item.Value)
-	err = fsProveDetails.Deserialize(reader)
-	if err != nil {
-		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[FS Profit] GetFsFileProveDetails deserialize error!")
-	}
-	return &fsProveDetails, nil
 }

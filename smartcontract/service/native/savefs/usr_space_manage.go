@@ -2,7 +2,6 @@ package savefs
 
 import (
 	"bytes"
-	"encoding/hex"
 	"math"
 
 	"github.com/saveio/themis/common"
@@ -15,7 +14,7 @@ import (
 
 func FsManageUserSpace(native *native.NativeService) ([]byte, error) {
 	log.Debugf("FsManageUserSpace height %d\n", native.Height)
-	contract := native.ContextRef.CurrentContext().ContractAddress
+
 	var userSpaceParams UserSpaceParams
 	source := common.NewZeroCopySource(native.Input)
 	if err := userSpaceParams.Deserialization(source); err != nil {
@@ -37,17 +36,14 @@ func FsManageUserSpace(native *native.NativeService) ([]byte, error) {
 	// updated files
 	for _, fi := range updatedFiles {
 		if err = setFsFileInfo(native, fi); err != nil {
-			return utils.BYTE_FALSE,
-				errors.NewErr("[FS UserSpace] FsManageUserSpace setFsFileInfo error:" + err.Error())
+			return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] FsManageUserSpace setFsFileInfo error:" + err.Error())
 		}
 	}
 	// update userspace
-	bf := new(bytes.Buffer)
-	if err = newUserSpace.Serialize(bf); err != nil {
-		return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] FsManageUserSpace userspace serialize error!")
+	if err = setUserSpace(native, newUserSpace, userSpaceParams.Owner); err != nil {
+		return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] FsManageUserSpace setUserSpace  error!")
 	}
-	userspaceKey := GenFsUserSpaceKey(contract, userSpaceParams.Owner)
-	utils.PutBytes(native, userspaceKey, bf.Bytes())
+
 	log.Debugf("owner :%s, size %v, block count: %v\n",
 		userSpaceParams.Owner.ToBase58(), userSpaceParams.Size, userSpaceParams.BlockCount)
 	SetUserSpaceEvent(native, userSpaceParams.WalletAddr, userSpaceParams.Size.Type, userSpaceParams.Size.Value,
@@ -77,27 +73,29 @@ func FsGetUpdateCost(native *native.NativeService) ([]byte, error) {
 }
 
 func FsGetUserSpace(native *native.NativeService) ([]byte, error) {
-	contract := native.ContextRef.CurrentContext().ContractAddress
 	source := common.NewZeroCopySource(native.Input)
 	walletAddr, err := utils.DecodeAddress(source)
 	if err != nil {
 		return EncRet(false, []byte("[FS UserSpace] FsGetUserSpace DecodeAddress error!")), nil
 	}
-	userspaceKey := GenFsUserSpaceKey(contract, walletAddr)
-	item, err := utils.GetStorageItem(native, userspaceKey)
+
+	userspace, err := getUserSpace(native, walletAddr)
 	if err != nil {
-		return EncRet(false, []byte("[FS UserSpace] FsGetUserSpace GetStorageItem error!")), nil
+		return EncRet(false, []byte("[FS UserSpace] FsGetUserSpace GetUserSpace error!")), nil
 	}
-	if item == nil {
-		return EncRet(false, []byte("[FS UserSpace] FsGetUserSpace not found!")), nil
+
+	bf := new(bytes.Buffer)
+	err = userspace.Serialize(bf)
+	if err != nil {
+		return EncRet(false, []byte("[FS Userspace] FsGetUserSpace userspace serialize error!")), nil
 	}
-	log.Debugf("[FS UserSpace] get user space %s, len:%d\n", hex.EncodeToString(userspaceKey), len(item.Value))
-	return EncRet(true, item.Value), nil
+	return EncRet(true, bf.Bytes()), nil
 }
 
 func getUserspaceChange(native *native.NativeService) (*UserSpace, *usdt.State, []*FileInfo, error) {
 	contract := native.ContextRef.CurrentContext().ContractAddress
 	currentHeight := uint64(native.Height)
+
 	var userSpaceParams UserSpaceParams
 	source := common.NewZeroCopySource(native.Input)
 	if err := userSpaceParams.Deserialization(source); err != nil {
@@ -108,6 +106,7 @@ func getUserspaceChange(native *native.NativeService) (*UserSpace, *usdt.State, 
 	if userSpaceParams.Size.Value == 0 && userSpaceParams.BlockCount.Value == 0 {
 		return nil, nil, nil, errors.NewErr("[FS UserSpace] nothing happen")
 	}
+
 	fileList, err := GetFsFileList(native, userSpaceParams.Owner)
 	if err != nil {
 		return nil, nil, nil, errors.NewErr("[FS UserSpace] GetFsFileList error")

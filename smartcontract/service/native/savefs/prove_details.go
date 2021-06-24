@@ -19,10 +19,13 @@
 package savefs
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
 	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/errors"
+	"github.com/saveio/themis/smartcontract/service/native"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
 
@@ -112,4 +115,60 @@ func (this *FsProveDetails) Deserialize(r io.Reader) error {
 		this.ProveDetails = append(this.ProveDetails, tmpProveDetail)
 	}
 	return nil
+}
+
+func getProveDetailsWithNodeAddr(native *native.NativeService, fileHash []byte) (*FsProveDetails, error) {
+	proveDetails, err := getProveDetails(native, fileHash)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := uint64(0); i < proveDetails.ProveDetailNum; i++ {
+		nodeInfo, err := getFsNodeInfo(native, proveDetails.ProveDetails[i].WalletAddr)
+		if err != nil {
+			return nil, errors.NewErr("[FS Govern] GetProveDetails GetFsNodeInfo error!")
+		}
+		proveDetails.ProveDetails[i].NodeAddr = nodeInfo.NodeAddr
+	}
+	return proveDetails, nil
+}
+
+func getProveDetails(native *native.NativeService, fileHash []byte) (*FsProveDetails, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	proveDetailKey := GenFsProveDetailsKey(contract, fileHash)
+	item, err := utils.GetStorageItem(native, proveDetailKey)
+	if err != nil {
+		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[FS Profit] FileProveDetails GetStorageItem error!")
+	}
+	if item == nil {
+		return nil, errors.NewErr("[FS Profit] FileProveDetails not found!")
+	}
+
+	var proveDetails FsProveDetails
+	reader := bytes.NewReader(item.Value)
+	err = proveDetails.Deserialize(reader)
+	if err != nil {
+		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[FS Profit] GetProveDetails deserialize error!")
+	}
+	return &proveDetails, nil
+}
+
+func setProveDetails(native *native.NativeService, fileHash []byte, proveDetails *FsProveDetails) error {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	proveDetailsKey := GenFsProveDetailsKey(contract, fileHash)
+	proveDetailsBuff := new(bytes.Buffer)
+	if err := proveDetails.Serialize(proveDetailsBuff); err != nil {
+		return errors.NewErr("[FS Govern] ProveDetails serialize error!")
+	}
+	utils.PutBytes(native, proveDetailsKey, proveDetailsBuff.Bytes())
+	return nil
+}
+
+func deleteProveDetails(native *native.NativeService, fileHash []byte) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	fileInfoKey := GenFsFileInfoKey(contract, fileHash)
+	utils.DelStorageItem(native, fileInfoKey)
 }
