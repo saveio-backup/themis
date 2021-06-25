@@ -101,6 +101,7 @@ func getUserspaceChange(native *native.NativeService) (*UserSpace, *usdt.State, 
 	if err := userSpaceParams.Deserialization(source); err != nil {
 		return nil, nil, nil, errors.NewErr("[FS UserSpace] userSpaceParams deserialize error!")
 	}
+
 	log.Debugf("change user space wallet addr: %v", userSpaceParams.WalletAddr.ToBase58())
 	// nothing happens
 	if userSpaceParams.Size.Value == 0 && userSpaceParams.BlockCount.Value == 0 {
@@ -113,10 +114,14 @@ func getUserspaceChange(native *native.NativeService) (*UserSpace, *usdt.State, 
 	}
 	log.Debugf("get file list len %v", len(fileList.List))
 	// precheck, want to revoke size or time
-	wantToRevoke := (UserSpaceType(userSpaceParams.Size.Type) == UserSpaceRevoke ||
-		UserSpaceType(userSpaceParams.BlockCount.Type) == UserSpaceRevoke)
+	wantToRevoke := UserSpaceType(userSpaceParams.Size.Type) == UserSpaceRevoke ||
+		UserSpaceType(userSpaceParams.BlockCount.Type) == UserSpaceRevoke
 	if wantToRevoke && fileList.FileNum > 0 {
 		return nil, nil, nil, errors.NewErr("[FS UserSpace] can't revoke, there exists files")
+	}
+
+	if wantToRevoke && (userSpaceParams.WalletAddr.ToBase58() != userSpaceParams.Owner.ToBase58()) {
+		return nil, nil, nil, errors.NewErr("[FS UserSpace] can't revoke other user space")
 	}
 
 	fsSetting, err := getFsSetting(native)
@@ -165,9 +170,6 @@ func getUserspaceChange(native *native.NativeService) (*UserSpace, *usdt.State, 
 			oldUserspace.Used, oldUserspace.Remain, oldUserspace.ExpireHeight, oldUserspace.Balance)
 	} else {
 		log.Debugf("oldUserspace not found")
-	}
-	if wantToRevoke && (userSpaceParams.WalletAddr.ToBase58() != userSpaceParams.Owner.ToBase58()) {
-		return nil, nil, nil, errors.NewErr("[FS UserSpace] can't revoke other user space")
 	}
 	var newUserSpace *UserSpace
 	var updatedFiles []*FileInfo
