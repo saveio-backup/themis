@@ -154,8 +154,8 @@ func FsStoreFile(native *native.NativeService) ([]byte, error) {
 	}
 	uploadFee := calcDepositFee(uploadOpt, fsSetting, native.Height)
 	log.Debugf("deposit fee %d %d", uploadFee.ValidationFee, uploadFee.SpaceFee)
-	fileInfo.Deposit = uploadFee.SpaceFee + uploadFee.ValidationFee
-	fileInfo.ProveTimes = (fileInfo.ExpiredHeight-uint64(native.Height))/fileInfo.ProveInterval + 1
+	fileInfo.Deposit = uploadFee.Sum()
+	fileInfo.ProveTimes = calcProveTimesByUploadInfo(uploadOpt, native.Height)
 
 	log.Debugf("rate:%d, blkNum:%d, blkSize: %d, gaskbblk: %d, gasC: %d, times:%d gasPrice:%d, copyNum:%d, deposit :%d\n", fileInfo.ProveInterval, fileInfo.FileBlockNum,
 		fileInfo.FileBlockSize, fsSetting.GasPerKBForRead, fsSetting.GasForChallenge, fileInfo.ProveTimes, fsSetting.FsGasPrice, fileInfo.CopyNum, fileInfo.Deposit)
@@ -174,8 +174,8 @@ func FsStoreFile(native *native.NativeService) ([]byte, error) {
 			return utils.BYTE_FALSE, errors.NewErr("FS Profit] Userspace insufficient remain storage!")
 		}
 
-		if userspace.ExpireHeight < fileInfo.ExpiredHeight {
-			return utils.BYTE_FALSE, errors.NewErr("FS Profit] Userspace insufficient remain storage!")
+		if userspace.ExpireHeight != fileInfo.ExpiredHeight {
+			return utils.BYTE_FALSE, errors.NewErr("FS Profit] Userspace wrong expiredHeight!")
 		}
 
 		log.Debugf("userspace store file: %v, fileinfo: %v", userspace, fileInfo)

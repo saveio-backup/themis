@@ -73,10 +73,34 @@ func calcDepositFee(uploadInfo *UploadOption, setting *FsSetting, currentHeight 
 	if fileSize <= 0 {
 		fileSize = 1
 	}
-	proveTime := (uploadInfo.ExpiredHeight-uint64(currentHeight))/uploadInfo.ProveInterval + 1
+	proveTime := calcProveTimesByUploadInfo(uploadInfo, currentHeight)
 	fee := calcFee(setting, proveTime, uploadInfo.CopyNum, fileSize, uploadInfo.ExpiredHeight-uint64(currentHeight))
 
 	return fee
+}
+
+// calculate the userspace deposit like the whole space is used by a single file
+func calcDepositFeeForUserSpace(userspace *UserSpace, setting *FsSetting, currentHeight uint32) *StorageFee {
+	uploadOpt := &UploadOption{
+		FileSize:      userspace.Used + userspace.Remain,
+		ProveInterval: setting.DefaultProvePeriod,
+		ExpiredHeight: userspace.ExpireHeight,
+		CopyNum:       setting.DefaultCopyNum,
+	}
+
+	return calcDepositFee(uploadOpt, setting, currentHeight)
+}
+
+func calcProveTimesByUploadInfo(uploadInfo *UploadOption, beginHeight uint32) uint64 {
+	return (uploadInfo.ExpiredHeight-uint64(beginHeight))/uploadInfo.ProveInterval + 1
+}
+
+func calcProveTimesByFileInfo(fileInfo *FileInfo, beginHeight uint32) uint64 {
+	uploadOpt := &UploadOption{
+		ProveInterval: fileInfo.ProveInterval,
+		ExpiredHeight: fileInfo.ExpiredHeight,
+	}
+	return calcProveTimesByUploadInfo(uploadOpt, beginHeight)
 }
 
 func calcFee(setting *FsSetting, proveTime, copyNum, fileSize, duration uint64) *StorageFee {

@@ -257,3 +257,74 @@ func setUserSpace(native *native.NativeService, userspace *UserSpace, addr commo
 	utils.PutBytes(native, userSpaceKey, bf.Bytes())
 	return nil
 }
+
+// get saved user space, nil if not found
+func getOldUserSpace(native *native.NativeService, addr common.Address) (*UserSpace, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	userSpaceKey := GenFsUserSpaceKey(contract, addr)
+	item, err := utils.GetStorageItem(native, userSpaceKey)
+	if err != nil {
+		return nil, errors.NewErr("GetUserSpace GetStorageItem error!")
+	}
+
+	if item == nil || len(item.Value) == 0 {
+		return nil, nil
+	}
+
+	var userSpace UserSpace
+	reader := bytes.NewReader(item.Value)
+	if err = userSpace.Deserialize(reader); err != nil {
+		return nil, errors.NewErr("GetUserSpace deserialize error!")
+	}
+
+	return &userSpace, nil
+}
+
+const (
+	// user space operation for size and block count
+	UserSpaceOps_None_None     = uint64(UserSpaceNone<<4 | UserSpaceNone)
+	UserspaceOps_None_Add      = uint64(UserSpaceNone<<4 | UserSpaceAdd)
+	UserspaceOps_None_Revoke   = uint64(UserSpaceNone<<4 | UserSpaceRevoke)
+	UserspaceOps_Add_None      = uint64(UserSpaceAdd<<4 | UserSpaceNone)
+	UserspaceOps_Add_Add       = uint64(UserSpaceAdd<<4 | UserSpaceAdd)
+	UserspaceOps_Add_Revoke    = uint64(UserSpaceAdd<<4 | UserSpaceRevoke)
+	UserspaceOps_Revoke_None   = uint64(UserSpaceRevoke<<4 | UserSpaceNone)
+	UserspaceOps_Revoke_Add    = uint64(UserSpaceRevoke<<4 | UserSpaceAdd)
+	UserspaceOps_Revoke_Revoke = uint64(UserSpaceRevoke<<4 | UserSpaceRevoke)
+)
+
+func isValidUserSpaceType(t UserSpaceType) bool {
+	switch t {
+	case UserSpaceNone, UserSpaceAdd, UserSpaceRevoke:
+		return true
+	default:
+		return false
+	}
+}
+
+func combineUserSpaceTypes(t1, t2 UserSpaceType) uint64 {
+	t := (byte)(t1)<<4 | (byte)(t2)
+	return uint64(t)
+}
+
+// check if there is revoke operation for revoke
+func isRevokeUserSpace(params *UserSpaceParams) bool {
+	return UserSpaceType(params.Size.Type) == UserSpaceRevoke ||
+		UserSpaceType(params.BlockCount.Type) == UserSpaceRevoke
+}
+
+func getUserSpaceOperationsFromParams(params *UserSpaceParams) (uint64, error) {
+	if params.Size == nil || params.BlockCount == nil {
+		return 0, errors.NewErr("UserSpaceParams size or block count is nil")
+	}
+
+	sizeType := UserSpaceType(params.Size.Type)
+	blockCountType := UserSpaceType(params.BlockCount.Type)
+
+	if !isValidUserSpaceType(sizeType) || !isValidUserSpaceType(blockCountType) {
+		return 0, errors.NewErr("UserSpaceParams invalid userSpaceType")
+	}
+
+	return combineUserSpaceTypes(sizeType, blockCountType), nil
+}

@@ -2,8 +2,6 @@ package savefs
 
 import (
 	"bytes"
-	"math"
-
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/log"
 	"github.com/saveio/themis/errors"
@@ -23,7 +21,7 @@ func FsManageUserSpace(native *native.NativeService) ([]byte, error) {
 	if !native.ContextRef.CheckWitness(userSpaceParams.WalletAddr) {
 		return utils.BYTE_FALSE, errors.NewErr("FS UserSpace] FsManageUserSpace CheckWitness failed!")
 	}
-	newUserSpace, state, updatedFiles, err := getUserspaceChange(native)
+	newUserSpace, state, updatedFiles, err := getUserspaceChange(native, &userSpaceParams)
 	if err != nil {
 		return utils.BYTE_FALSE, err
 	}
@@ -53,12 +51,7 @@ func FsManageUserSpace(native *native.NativeService) ([]byte, error) {
 }
 
 func FsGetUpdateCost(native *native.NativeService) ([]byte, error) {
-	var userSpaceParams UserSpaceParams
-	source := common.NewZeroCopySource(native.Input)
-	if err := userSpaceParams.Deserialization(source); err != nil {
-		return EncRet(false, []byte("[FS UserSpace] userSpaceParams deserialize error!")), nil
-	}
-	_, state, _, err := getUserspaceChange(native)
+	_, state, _, err := getUserspaceChange(native, nil)
 	if err != nil {
 		log.Errorf("get user space change err %s", err)
 		return EncRet(false, []byte(err.Error())), nil
@@ -92,147 +85,171 @@ func FsGetUserSpace(native *native.NativeService) ([]byte, error) {
 	return EncRet(true, bf.Bytes()), nil
 }
 
-func getUserspaceChange(native *native.NativeService) (*UserSpace, *usdt.State, []*FileInfo, error) {
-	contract := native.ContextRef.CurrentContext().ContractAddress
+func getUserspaceChange(native *native.NativeService, userSpaceParams *UserSpaceParams) (*UserSpace, *usdt.State, []*FileInfo, error) {
 	currentHeight := uint64(native.Height)
 
-	var userSpaceParams UserSpaceParams
-	source := common.NewZeroCopySource(native.Input)
-	if err := userSpaceParams.Deserialization(source); err != nil {
-		return nil, nil, nil, errors.NewErr("[FS UserSpace] userSpaceParams deserialize error!")
-	}
-
-	log.Debugf("change user space wallet addr: %v", userSpaceParams.WalletAddr.ToBase58())
-	// nothing happens
-	if userSpaceParams.Size.Value == 0 && userSpaceParams.BlockCount.Value == 0 {
-		return nil, nil, nil, errors.NewErr("[FS UserSpace] nothing happen")
-	}
-
-	fileList, err := GetFsFileList(native, userSpaceParams.Owner)
-	if err != nil {
-		return nil, nil, nil, errors.NewErr("[FS UserSpace] GetFsFileList error")
-	}
-	log.Debugf("get file list len %v", len(fileList.List))
-	// precheck, want to revoke size or time
-	wantToRevoke := UserSpaceType(userSpaceParams.Size.Type) == UserSpaceRevoke ||
-		UserSpaceType(userSpaceParams.BlockCount.Type) == UserSpaceRevoke
-	if wantToRevoke && fileList.FileNum > 0 {
-		return nil, nil, nil, errors.NewErr("[FS UserSpace] can't revoke, there exists files")
-	}
-
-	if wantToRevoke && (userSpaceParams.WalletAddr.ToBase58() != userSpaceParams.Owner.ToBase58()) {
-		return nil, nil, nil, errors.NewErr("[FS UserSpace] can't revoke other user space")
+	if userSpaceParams == nil {
+		var params UserSpaceParams
+		source := common.NewZeroCopySource(native.Input)
+		if err := params.Deserialization(source); err != nil {
+			return nil, nil, nil, errors.NewErr("[FS UserSpace] userSpaceParams deserialize error!")
+		}
+		userSpaceParams = &params
 	}
 
 	fsSetting, err := getFsSetting(native)
 	if err != nil {
 		return nil, nil, nil, errors.NewErr("[FS UserSpace] getFsSetting error!")
 	}
-	userSpaceKey := GenFsUserSpaceKey(contract, userSpaceParams.Owner)
-	item, err := utils.GetStorageItem(native, userSpaceKey)
-	if err != nil {
-		return nil, nil, nil, errors.NewErr("[FS UserSpace] GetStorageItem error!")
+
+	log.Debugf("change user space wallet addr: %v", userSpaceParams.WalletAddr.ToBase58())
+
+	if err := checkUserSpaceParams(native, userSpaceParams); err != nil {
+		return nil, nil, nil, errors.NewErr("[FS UserSpace] checkUserSpaceParams error!")
 	}
-	var oldUserspace *UserSpace
-	// check old userspace
-	notFound := (item == nil || len(item.Value) == 0)
-	if !notFound {
-		oldUserspace = &UserSpace{}
-		reader := bytes.NewReader(item.Value)
-		if err = oldUserspace.Deserialize(reader); err != nil {
-			return nil, nil, nil, errors.NewDetailErr(err, errors.ErrNoCode, "[FS UserSpace] Set deserialize error!")
-		}
-		if oldUserspace.ExpireHeight <= currentHeight {
-			oldUserspace.Used = 0
-			oldUserspace.Remain = 0
-			oldUserspace.Balance = 0
-			oldUserspace.ExpireHeight = currentHeight
-			oldUserspace.UpdateHeight = currentHeight
-		}
+
+	oldUserspace, err := getOldUserSpace(native, userSpaceParams.Owner)
+	if err != nil {
+		return nil, nil, nil, errors.NewErr("[FS UserSpace] getOldUserSpace error!")
+	}
+	if oldUserspace != nil && oldUserspace.ExpireHeight <= currentHeight {
+		processExpiredUserSpace(oldUserspace, currentHeight)
 	}
 
 	// first operate user space or operate a expired space
-	if notFound || oldUserspace.ExpireHeight == currentHeight {
-		if wantToRevoke {
-			return nil, nil, nil, errors.NewErr("[FS UserSpace]  no user space to revoke")
-		}
-		if userSpaceParams.Size.Value == 0 || userSpaceParams.BlockCount.Value == 0 {
-			return nil, nil, nil,
-				errors.NewErr("[FS UserSpace]  size and block count should both bigger than 0 first time")
-		}
-		if userSpaceParams.BlockCount.Value < fsSetting.DefaultProvePeriod {
-			return nil, nil, nil,
-				errors.NewErr("[FS UserSpace]  block count too small at first purchase user space!")
+	if oldUserspace == nil || oldUserspace.ExpireHeight == currentHeight {
+		if err = checkForFirstUserSpaceOperation(fsSetting, userSpaceParams); err != nil {
+			return nil, nil, nil, errors.NewErr("[FS UserSpace] checkForFirstUserSpaceOperation error!")
 		}
 	}
+
+	return processForUserSpaceOperations(native, userSpaceParams, oldUserspace, fsSetting)
+}
+
+func checkUserSpaceParams(native *native.NativeService, userSpaceParams *UserSpaceParams) error {
+	if userSpaceParams.Size.Value == 0 && userSpaceParams.BlockCount.Value == 0 {
+		return errors.NewErr("[FS UserSpace] nothing happen")
+	}
+
+	ops, err := getUserSpaceOperationsFromParams(userSpaceParams)
+	if err != nil {
+		return err
+	}
+
+	if ops == UserSpaceOps_None_None {
+		return errors.NewErr("[FS UserSpace] nothing happen")
+	}
+
+	// check for revoke space
+	if isRevokeUserSpace(userSpaceParams) {
+		if err = checkForUserSpaceRevoke(native, userSpaceParams); err != nil {
+			return errors.NewErr("[FS UserSpace] checkForUserSpaceRevoke error")
+		}
+	}
+	return nil
+}
+func checkForFirstUserSpaceOperation(fsSetting *FsSetting, userSpaceParams *UserSpaceParams) error {
+	ops, err := getUserSpaceOperationsFromParams(userSpaceParams)
+	if err != nil {
+		return err
+	}
+
+	if ops != UserspaceOps_Add_Add {
+		return errors.NewErr("[FS UserSpace] nothing happen")
+	}
+
+	if userSpaceParams.Size.Value == 0 || userSpaceParams.BlockCount.Value == 0 {
+		return errors.NewErr("[FS UserSpace]  size and block count should both bigger than 0 first time")
+	}
+	if userSpaceParams.BlockCount.Value < fsSetting.DefaultProvePeriod {
+		return errors.NewErr("[FS UserSpace]  block count too small at first purchase user space!")
+	}
+	return nil
+}
+
+func checkForUserSpaceRevoke(native *native.NativeService, userSpaceParams *UserSpaceParams) error {
+	fileList, err := GetFsFileList(native, userSpaceParams.Owner)
+	if err != nil {
+		return errors.NewErr("[FS UserSpace] GetFsFileList error")
+	}
+
+	if fileList.FileNum > 0 {
+		return errors.NewErr("[FS UserSpace] can't revoke, there exists files")
+	}
+
+	if userSpaceParams.WalletAddr.ToBase58() != userSpaceParams.Owner.ToBase58() {
+		return errors.NewErr("[FS UserSpace] can't revoke other user space")
+	}
+	return nil
+}
+
+func processExpiredUserSpace(userSpace *UserSpace, currentHeight uint64) {
+	// we consider expired user space is no longer available to user
+	userSpace.Used = 0
+	userSpace.Remain = 0
+	// TODO :how should handle remaining balance?
+	//userSpace.Balance = 0
+	userSpace.ExpireHeight = currentHeight
+	userSpace.UpdateHeight = currentHeight
+}
+
+func processForUserSpaceOperations(native *native.NativeService, userSpaceParams *UserSpaceParams,
+	oldUserspace *UserSpace, fsSetting *FsSetting) (*UserSpace, *usdt.State, []*FileInfo, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	var newUserSpace *UserSpace
+	var updatedFiles []*FileInfo
+	var transferIn, transferOut uint64
+	var err error
+
+	currentHeight := uint64(native.Height)
+
 	if oldUserspace != nil {
 		log.Debugf("oldUserspace.used: %d, remain: %d, expired: %d, balance: %d",
 			oldUserspace.Used, oldUserspace.Remain, oldUserspace.ExpireHeight, oldUserspace.Balance)
 	} else {
 		log.Debugf("oldUserspace not found")
 	}
-	var newUserSpace *UserSpace
-	var updatedFiles []*FileInfo
-	var transferIn, transferOut uint64
-	if UserSpaceType(userSpaceParams.Size.Type) == UserSpaceNone &&
-		UserSpaceType(userSpaceParams.BlockCount.Type) == UserSpaceNone {
-		return nil, nil, nil, errors.NewErr("[FS UserSpace] nothing happen")
+
+	fileList, err := GetFsFileList(native, userSpaceParams.Owner)
+	if err != nil {
+		return nil, nil, nil, errors.NewErr("[FS UserSpace] GetFsFileList error")
 	}
-	if UserSpaceType(userSpaceParams.Size.Type) != UserSpaceRevoke &&
-		UserSpaceType(userSpaceParams.BlockCount.Type) != UserSpaceRevoke {
-		// both add  01,10,11
-		us, amount, updated, err := fsAddUserSpace(native, oldUserspace, userSpaceParams.Size.Value,
+
+	userSpaceOps, _ := getUserSpaceOperationsFromParams(userSpaceParams)
+	switch userSpaceOps {
+	// at least one add, no revoke
+	case UserspaceOps_Add_Add, UserspaceOps_Add_None, UserspaceOps_None_Add:
+		newUserSpace, transferIn, updatedFiles, err = fsAddUserSpace(native, oldUserspace, userSpaceParams.Size.Value,
 			userSpaceParams.BlockCount.Value, currentHeight, fsSetting, fileList)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		newUserSpace = us
-		transferIn = amount
-		updatedFiles = updated
-	} else if UserSpaceType(userSpaceParams.Size.Type) != UserSpaceAdd &&
-		UserSpaceType(userSpaceParams.BlockCount.Type) != UserSpaceAdd {
-		// both revoke 02,20,22
-		us, amount, err := fsRevokeUserspace(oldUserspace, userSpaceParams.Size.Value,
+		// at least one revoke no add
+	case UserspaceOps_Revoke_Revoke, UserspaceOps_None_Revoke, UserspaceOps_Revoke_None:
+		newUserSpace, transferOut, err = fsRevokeUserspace(oldUserspace, userSpaceParams.Size.Value,
 			userSpaceParams.BlockCount.Value, currentHeight, fsSetting)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		newUserSpace = us
-		transferOut = amount
-	} else {
-		// one add && one revoke
-		// 12, 21
-		addedSize, addedBlockCount, revokeSize, revokeBlockcount := uint64(0), uint64(0), uint64(0), uint64(0)
-		if UserSpaceType(userSpaceParams.Size.Type) == UserSpaceAdd &&
-			UserSpaceType(userSpaceParams.BlockCount.Type) == UserSpaceRevoke {
-			addedSize, addedBlockCount = userSpaceParams.Size.Value, 0
-			revokeSize, revokeBlockcount = 0, userSpaceParams.BlockCount.Value
-		} else if UserSpaceType(userSpaceParams.Size.Type) == UserSpaceRevoke &&
-			UserSpaceType(userSpaceParams.BlockCount.Type) == UserSpaceAdd {
-			addedSize, addedBlockCount = 0, userSpaceParams.BlockCount.Value
-			revokeSize, revokeBlockcount = userSpaceParams.Size.Value, 0
-		} else {
-			return nil, nil, nil, errors.NewErr("[FS UserSpace] FsManageUserSpace Unknown type !")
-		}
-		us, addedAmount, update, err := fsAddUserSpace(native, oldUserspace, addedSize,
-			addedBlockCount, currentHeight, fsSetting, fileList)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		us2, revokedAmount, err := fsRevokeUserspace(us, revokeSize, revokeBlockcount, currentHeight, fsSetting)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		newUserSpace = us2
-		transferIn = addedAmount
-		transferOut = revokedAmount
-		updatedFiles = update
+	case UserspaceOps_Add_Revoke, UserspaceOps_Revoke_Add:
+		newUserSpace, transferIn, transferOut, updatedFiles, err = processForUserSpaceOneAddOneRevoke(native,
+			userSpaceParams, oldUserspace, fsSetting, fileList, userSpaceOps)
+	default:
+		return nil, nil, nil, errors.NewErr("invalid userspace operation")
 	}
+
+	if newUserSpace == nil {
+		return nil, nil, nil, errors.NewErr("new user space is nil")
+	}
+
 	newUserSpace.UpdateHeight = uint64(native.Height)
+
 	log.Debugf("transfer in %d, out: %d, newuserspace.used: %d, remain: %d, expired: %d, balance: %d, height: %d",
 		transferIn, transferOut,
 		newUserSpace.Used, newUserSpace.Remain, newUserSpace.ExpireHeight,
 		newUserSpace.Balance, newUserSpace.UpdateHeight)
+
 	// transfer state
 	state := &usdt.State{}
 	if transferIn >= transferOut {
@@ -247,90 +264,168 @@ func getUserspaceChange(native *native.NativeService) (*UserSpace, *usdt.State, 
 	return newUserSpace, state, updatedFiles, nil
 }
 
+func processForUserSpaceOneAddOneRevoke(native *native.NativeService, userSpaceParams *UserSpaceParams,
+	oldUserspace *UserSpace, fsSetting *FsSetting, fileList *FileList, ops uint64) (*UserSpace, uint64, uint64, []*FileInfo, error) {
+	currentHeight := uint64(native.Height)
+	var addedSize, addedBlockCount, revokedSize, revokedBlockCount uint64
+
+	switch ops {
+	case UserspaceOps_Add_Revoke:
+		addedSize = userSpaceParams.Size.Value
+		revokedBlockCount = userSpaceParams.BlockCount.Value
+	case UserspaceOps_Revoke_Add:
+		revokedSize = userSpaceParams.Size.Value
+		addedBlockCount = userSpaceParams.BlockCount.Value
+	}
+
+	us, addedAmount, update, err := fsAddUserSpace(native, oldUserspace, addedSize,
+		addedBlockCount, currentHeight, fsSetting, fileList)
+	if err != nil {
+		return nil, 0, 0, nil, err
+	}
+
+	us2, revokedAmount, err := fsRevokeUserspace(us, revokedSize, revokedBlockCount, currentHeight, fsSetting)
+	if err != nil {
+		return nil, 0, 0, nil, err
+	}
+
+	return us2, addedAmount, revokedAmount, update, nil
+}
+
 func fsAddUserSpace(native *native.NativeService, oldUserspace *UserSpace,
 	addSize, addBlockCount, currentHeight uint64, fsSetting *FsSetting, fileList *FileList) (
 	*UserSpace, uint64, []*FileInfo, error) {
-	// new slice for updated file infos
-	updatedFiles := make([]*FileInfo, 0)
-	newUserSpace := &UserSpace{}
+
+	// create user space
 	if oldUserspace == nil {
-		oldUserspace = &UserSpace{
+		newUserSpace := &UserSpace{
 			Used:         0,
-			Remain:       0,
-			ExpireHeight: currentHeight,
+			Remain:       addSize,
+			ExpireHeight: currentHeight + addBlockCount,
 			Balance:      0,
 		}
-	}
-	log.Debugf("add user space: old.used:%d, remain:%d, expired:%d, balance:%d, updated:%d",
-		oldUserspace.Used, oldUserspace.Remain, oldUserspace.ExpireHeight,
-		oldUserspace.Balance, oldUserspace.UpdateHeight)
-	// calculate added challenge times
-	addedTimes := uint64(math.Ceil(float64(addBlockCount) / float64(fsSetting.DefaultProvePeriod)))
 
-	// calculate remain chanllenge times
-	remainTimes := uint64(0)
-	if oldUserspace.ExpireHeight > currentHeight {
-		remainTimes = uint64(math.Ceil(
-			float64(oldUserspace.ExpireHeight-currentHeight) / float64(fsSetting.DefaultProvePeriod)))
-	}
-	// calculate renew fee
-	spaceSize := oldUserspace.Remain + addSize
-	total := calcFee(fsSetting, addedTimes+remainTimes, fsSetting.DefaultCopyNum, spaceSize,
-		fsSetting.DefaultProvePeriod*(addedTimes+remainTimes))
-	log.Debugf("addedTimes %d addblockCount %d  default %d, spaceSize %d, remainTimes %d, total %v",
-		addedTimes, addBlockCount, fsSetting.DefaultProvePeriod,
-		spaceSize, remainTimes, total)
-	deposit := uint64(0)
-	// if renew fee large than balance, user need to deposit
-	if total.ValidationFee+total.TxnFee+total.SpaceFee > oldUserspace.Balance {
-		deposit = (total.ValidationFee + total.TxnFee + total.SpaceFee) - oldUserspace.Balance
-	}
-	newUserSpace.Used = oldUserspace.Used
-	newUserSpace.Remain = oldUserspace.Remain + addSize
-	newExpiredHeight := oldUserspace.ExpireHeight + addBlockCount
-	newUserSpace.ExpireHeight = newExpiredHeight
-	newUserSpace.Balance = oldUserspace.Balance + deposit
-	// calulate challenge times for extend space, because of userSpaceParams.Size  > 0
-	log.Debugf("newExpiredHeight %d, balance %d, deposit %d",
-		newUserSpace.ExpireHeight, newUserSpace.Balance, deposit)
-	if addBlockCount == 0 || fileList.FileNum == 0 {
+		fee := calcDepositFeeForUserSpace(newUserSpace, fsSetting, uint32(currentHeight))
+		newUserSpace.Balance = fee.Sum()
+
+		return newUserSpace, fee.Sum(), nil, nil
+	} else {
+		log.Debugf("add user space: old.used:%d, remain:%d, expired:%d, balance:%d, updated:%d",
+			oldUserspace.Used, oldUserspace.Remain, oldUserspace.ExpireHeight,
+			oldUserspace.Balance, oldUserspace.UpdateHeight)
+
+		updatedFiles := make([]*FileInfo, 0)
+
+		newExpiredHeight := oldUserspace.ExpireHeight + addBlockCount
+		newRemain := oldUserspace.Remain + addSize
+
+		//  fee from now to expire height
+		fee1 := calcDepositFeeForUserSpace(oldUserspace, fsSetting, uint32(currentHeight))
+
+		newUserSpace := &UserSpace{
+			Used:         oldUserspace.Used,
+			Remain:       newRemain,
+			ExpireHeight: newExpiredHeight,
+			Balance:      oldUserspace.Balance,
+		}
+		// fee from now to new expire height with added size
+		fee2 := calcDepositFeeForUserSpace(newUserSpace, fsSetting, uint32(currentHeight))
+
+		if fee2.Sum() <= fee1.Sum() {
+			log.Errorf("invalid fee for addUserSpace: fee1 %d, fee2 %d", fee1.Sum(), fee2.Sum())
+			return nil, 0, nil, errors.NewErr("[FS Userspace] invalid fee for addUserSpace")
+		}
+
+		deposit := fee2.Sum() - fee1.Sum()
+
+		// we calculate the userspace fee by assuming a file with the same size of user space from the beginning of
+		// user space creation, but as block height grow, the deposit for a file with same size will decrease
+		// so there might be enough remaining balance for the new added size/block count.
+
+		// set used as 0 to do calculation for remaining size
+		oldUserspace.Used = 0
+		feeForRemaining := calcDepositFeeForUserSpace(oldUserspace, fsSetting, uint32(currentHeight))
+
+		if oldUserspace.Balance <= feeForRemaining.Sum() {
+			log.Errorf("invalid remaining fee for addUserSpace: fee %d", feeForRemaining.Sum())
+			return nil, 0, nil, errors.NewErr("[FS Userspace] invalid remaining fee for addUserSpace")
+		}
+
+		availableInBalance := oldUserspace.Balance - feeForRemaining.Sum()
+		if availableInBalance > deposit {
+			// enough in balance for added size/block count, no need deposit
+			deposit = 0
+		} else {
+			deposit = deposit - availableInBalance
+			newUserSpace.Balance += deposit
+		}
+
+		// find all file and update challenge times and deposit when add block count
+		if addBlockCount != 0 {
+			var err error
+			updatedFiles, err = updateFilesForRenew(native, fileList, fsSetting, newExpiredHeight)
+			if err != nil {
+				return nil, 0, nil, errors.NewErr("[FS UserSpace] updateFilesForRenew error")
+			}
+		}
+
 		return newUserSpace, deposit, updatedFiles, nil
 	}
-	// need update files
-	// find all file and update challenge times;
-	for _, storedFileHash := range fileList.List {
-		fileInfo, err := getFsFileInfo(native, storedFileHash.Hash)
+}
+
+func updateFilesForRenew(native *native.NativeService, fileList *FileList,
+	fsSetting *FsSetting, newExpireHeight uint64) ([]*FileInfo, error) {
+	updatedFiles := make([]*FileInfo, 0)
+
+	for _, fileHash := range fileList.List {
+		fileInfo, err := getFsFileInfo(native, fileHash.Hash)
 		if err != nil {
-			return nil, 0, nil, errors.NewErr("[FS UserSpace] FsManageUserSpace getFsFileInfo error")
+			return nil, errors.NewErr("[FS UserSpace] FsManageUserSpace getFsFileInfo error")
 		}
 		if fileInfo.StorageType != FileStorageTypeUseSpace {
 			continue
 		}
-		if newExpiredHeight <= fileInfo.ExpiredHeight {
+		if newExpireHeight <= fileInfo.ExpiredHeight {
 			// origin stored file info has exists
 			continue
 		}
-		// renew file
-		renewDuration := newExpiredHeight - fileInfo.ExpiredHeight
-		renewTimes := uint64(math.Ceil(float64(renewDuration) / float64(fileInfo.ProveInterval)))
-		fileInfo.ExpiredHeight = newExpiredHeight
-		updatedFiles = append(updatedFiles, fileInfo)
-		totalDeposit := calcFee(fsSetting, fileInfo.ProveTimes+renewTimes, fileInfo.CopyNum,
-			fileInfo.FileBlockNum*fileInfo.FileBlockSize, (fileInfo.ProveTimes+renewTimes)*fileInfo.ProveInterval)
-		oldDeposit := calcFee(fsSetting, fileInfo.ProveTimes, fileInfo.CopyNum,
-			fileInfo.FileBlockNum*fileInfo.FileBlockSize, fileInfo.ProveTimes*fileInfo.ProveInterval)
-		if totalDeposit.Sum() < oldDeposit.Sum() {
-			return nil, 0, nil, errors.NewErr("[FS UserSpace] FsManageUserSpace renew file new amount failed")
+
+		if err = updateFileInfoForRenew(fsSetting, newExpireHeight, fileInfo); err != nil {
+			return nil, errors.NewErr("[FS UserSpace] updateFileInfoForRenew error")
 		}
-		renewAmount := totalDeposit.Sum() - oldDeposit.Sum()
-		deposit += renewAmount
+		updatedFiles = append(updatedFiles, fileInfo)
+
 		log.Debugf("file %s origin expired height %d, new expired height %d, "+
-			"prove interval %d, fileSize %d, renew %d, new deposit %d",
-			storedFileHash.Hash, fileInfo.ExpiredHeight,
-			newExpiredHeight, fileInfo.ProveInterval, fileInfo.FileBlockNum*fileInfo.FileBlockSize,
-			renewAmount, deposit)
+			"prove interval %d, fileSize %d,new deposit %d",
+			fileHash.Hash, fileInfo.ExpiredHeight, newExpireHeight,
+			fileInfo.ProveInterval, fileInfo.FileBlockNum*fileInfo.FileBlockSize, fileInfo.Deposit)
 	}
-	return newUserSpace, deposit, updatedFiles, nil
+	return updatedFiles, nil
+}
+
+func updateFileInfoForRenew(fsSetting *FsSetting, newExpireHeight uint64, fileInfo *FileInfo) error {
+	fileInfo.ExpiredHeight = newExpireHeight
+
+	uploadOpt := &UploadOption{
+		ExpiredHeight: fileInfo.ExpiredHeight,
+		ProveInterval: fileInfo.ProveInterval,
+		CopyNum:       fileInfo.CopyNum,
+		FileSize:      fileInfo.FileBlockSize * fileInfo.FileBlockNum,
+	}
+
+	beginHeight := uint32(fileInfo.BlockHeight)
+
+	// use block height for storeFile and new expire height for new deposit calc
+	newDeposit := calcDepositFee(uploadOpt, fsSetting, beginHeight)
+
+	if newDeposit.Sum() <= fileInfo.Deposit {
+		log.Errorf("updateFileInfoForRenew, new deposit %d, orig deposit %d", newDeposit.Sum(), fileInfo.Deposit)
+		return errors.NewErr("[FS UserSpace] new deposit is not larger than old value !")
+	}
+
+	fileInfo.Deposit = newDeposit.Sum()
+	fileInfo.ProveTimes = calcProveTimesByUploadInfo(uploadOpt, beginHeight)
+	return nil
 }
 
 func fsRevokeUserspace(oldUserspace *UserSpace, revokeSize, revokeBlockCount, currentHeight uint64,
@@ -342,21 +437,32 @@ func fsRevokeUserspace(oldUserspace *UserSpace, revokeSize, revokeBlockCount, cu
 		return nil, 0, errors.NewErr("[FS UserSpace] FsManageUserSpace revoke too much block count!")
 	}
 
-	// calulate challenge times for extend space, because of userSpaceParams.Size  > 0
-	remainTimes := uint64(math.Ceil(
-		float64(oldUserspace.ExpireHeight-revokeBlockCount-currentHeight) / float64(fsSetting.DefaultProvePeriod)))
-	remainBalance := calcFee(fsSetting, remainTimes, fsSetting.DefaultCopyNum,
-		(oldUserspace.Remain - revokeSize), fsSetting.DefaultProvePeriod*remainTimes)
-	log.Debugf("remain times %d, expired %d, current %d, remain balance  %d, total balance %d",
-		remainTimes, oldUserspace.ExpireHeight, currentHeight, remainBalance.Sum(), oldUserspace.Balance)
-	amount := uint64(0)
-	if oldUserspace.Balance > remainBalance.Sum() {
-		amount = oldUserspace.Balance - remainBalance.Sum()
+	newUserSpace := &UserSpace{
+		Used:         oldUserspace.Used,
+		Remain:       oldUserspace.Remain - revokeSize,
+		ExpireHeight: oldUserspace.ExpireHeight - revokeBlockCount,
+		Balance:      oldUserspace.Balance,
 	}
-	newUserSpace := &UserSpace{}
-	newUserSpace.Used = oldUserspace.Used
-	newUserSpace.Remain = oldUserspace.Remain - revokeSize
-	newUserSpace.Balance = oldUserspace.Balance - amount
-	newUserSpace.ExpireHeight = oldUserspace.ExpireHeight - revokeBlockCount
+
+	// fee from now to expire height
+	fee1 := calcDepositFeeForUserSpace(oldUserspace, fsSetting, uint32(currentHeight))
+
+	// fee from now to new expired height with revoked size
+	fee2 := calcDepositFeeForUserSpace(newUserSpace, fsSetting, uint32(currentHeight))
+
+	if fee1.Sum() <= fee2.Sum() {
+		log.Errorf("invalid fee for revokeUserSpace: fee1 %d, fee2 %d", fee1.Sum(), fee2.Sum())
+		return nil, 0, errors.NewErr("[FS Userspace] invalid fee for revokeUserSpace")
+	}
+
+	amount := fee1.Sum() - fee2.Sum()
+
+	if newUserSpace.Balance < amount {
+		log.Errorf("invalid balance for revokeUserSpace: balance %d, amount %d", newUserSpace.Balance, amount)
+		return nil, 0, errors.NewErr("[FS Userspace] balance is smaller than revoked amount")
+	}
+
+	newUserSpace.Balance -= amount
+
 	return newUserSpace, amount, nil
 }
