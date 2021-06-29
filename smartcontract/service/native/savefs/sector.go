@@ -220,7 +220,7 @@ func FsSectorProve(native *native.NativeService) ([]byte, error) {
 
 	if !ret {
 		log.Errorf("checkSectorProve not success")
-		err = punishForSector(native, sectorInfo)
+		err = punishForSector(native, sectorInfo, nodeInfo, fsSetting)
 		if err != nil {
 			return utils.BYTE_FALSE, errors.NewErr("[SectorProve] PunishForSector error!")
 		}
@@ -442,76 +442,38 @@ func profitSplitForSector(native *native.NativeService, sectorInfo *SectorInfo, 
 	return nil
 }
 
-func settleForFile(native *native.NativeService, fileInfo *FileInfo, nodeInfo *FsNodeInfo, proveDetail *ProveDetail, proveDetails *FsProveDetails, fsSetting *FsSetting) error {
+// when sector prove not ok,
+func punishForSector(native *native.NativeService, sectorInfo *SectorInfo, nodeInfo *FsNodeInfo, fsSetting *FsSetting) error {
 	contract := native.ContextRef.CurrentContext().ContractAddress
 
-	var err error
+	amount := calPunishmentForOneSectorProve(fsSetting, sectorInfo)
 
-	profit := calculateProfitForSettle(fileInfo, proveDetail, fsSetting)
+	log.Debugf("punish for sector, amount %d, node pledge %d", amount, nodeInfo.Pledge)
 
-	log.Debugf("settle profit: %d, deposit: %d, node: %s\n", profit, fileInfo.Deposit, proveDetail.WalletAddr.ToBase58())
-	if fileInfo.Deposit < profit {
-		return errors.NewErr("Deposit < Profit, balance error!")
+	if nodeInfo.Pledge >= amount {
+		nodeInfo.Pledge -= amount
+	} else {
+		nodeInfo.Pledge = 0
+		amount = nodeInfo.Pledge
 	}
 
-	nodeInfo.Profit += profit
-	if err = setFsNodeInfo(native, nodeInfo); err != nil {
-		return errors.NewErr("setFsNodeInfo error:" + err.Error())
-	}
+	if amount > 0 {
+		err := appCallTransfer(native, utils.UsdtContractAddress, nodeInfo.WalletAddr, contract, amount)
+		if err != nil {
+			return errors.NewErr("[SectorProve] appCallTransfer, transfer error!")
+		}
 
-	fileInfo.Deposit -= profit
-	fileInfo.ValidFlag = false
-
-	if err = setFsFileInfo(native, fileInfo); err != nil {
-		return errors.NewErr("[FS Govern] setFsFileInfo error:" + err.Error())
-	}
-
-	finishedNodes := uint64(0)
-	for i := 0; uint64(i) < proveDetails.ProveDetailNum; i++ {
-		if proveDetails.ProveDetails[i].Finished {
-			finishedNodes++
+		if err := setFsNodeInfo(native, nodeInfo); err != nil {
+			return errors.NewErr("[SectorProve] punishForSector setNodeInfo error!")
 		}
 	}
 
-	if finishedNodes == 1 {
-		DelFileFromList(native, fileInfo.FileOwner, fileInfo.FileHash)
-		for _, primaryWalletAddr := range fileInfo.PrimaryNodes.AddrList {
-			if err = DelFileFromPrimaryList(native, primaryWalletAddr, fileInfo.FileHash); err != nil {
-				return errors.NewErr("delete file from primary list error:" + err.Error())
-			}
-		}
-
-		for _, candidateWalletAddr := range fileInfo.CandidateNodes.AddrList {
-			if err = DelFileFromCandidateList(native, candidateWalletAddr, fileInfo.FileHash); err != nil {
-				return errors.NewErr("delete file from primary list error:" + err.Error())
-			}
-		}
-	}
-
-	// delete file info and prove details when all prove finish
-	// TODO: need consider the case some node may never submit the last prove
-	if finishedNodes == fileInfo.CopyNum+1 {
-		// give back if there are remaining deposit
-		if fileInfo.Deposit > 0 {
-			err = appCallTransfer(native, utils.UsdtContractAddress, contract, fileInfo.FileOwner, fileInfo.Deposit)
-			if err != nil {
-				return errors.NewErr("[SectorProve] AppCallTransfer, transfer error!")
-			}
-		}
-
-		fileInfoKey := GenFsFileInfoKey(contract, fileInfo.FileHash)
-		utils.DelStorageItem(native, fileInfoKey)
-
-		proveDetailsKey := GenFsProveDetailsKey(contract, fileInfo.FileHash)
-		utils.DelStorageItem(native, proveDetailsKey)
-
-	}
-
-	ProveFileEvent(native, fileInfo.FileHash, nodeInfo.WalletAddr, profit)
 	return nil
 }
 
-func punishForSector(native *native.NativeService, sectorInfo *SectorInfo) error {
-	// get all the files in the sectors and punish
-	return nil
+// when sector prove failed, we consider all files prove failed, so take sector.used to calculate profit
+// and take it as punishment
+func calPunishmentForOneSectorProve(fsSetting *FsSetting, sectorInfo *SectorInfo) uint64 {
+	punishFactor := uint64(2)
+	return punishFactor * calcSingleValidFeeForFile(fsSetting, sectorInfo.Used)
 }

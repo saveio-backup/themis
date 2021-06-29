@@ -485,16 +485,55 @@ func checkProve(native *native.NativeService, fileProve *FileProve, fileInfo *Fi
 	return true, nil
 }
 
-func calculateProfitForSettle(fileInfo *FileInfo, proveDetail *ProveDetail, fsSetting *FsSetting) uint64 {
-	// first prove just indicate the whole file has been uploaded and dont calc for profit
-	// copyNum pass 0 to calculate total fee for one node
-	total := calcFee(fsSetting, proveDetail.ProveTimes-1, 0, fileInfo.FileBlockNum*fileInfo.FileBlockSize, fileInfo.ExpiredHeight-fileInfo.BlockHeight)
-	log.Debugf("prove times: %d, block num: %d, block size: %d, expire height : %d, block height : %d, valid fee: %d, storage fee : %d\n",
-		proveDetail.ProveTimes, fileInfo.FileBlockNum, fileInfo.FileBlockSize, fileInfo.ExpiredHeight, fileInfo.BlockHeight, total.ValidationFee, total.SpaceFee)
+func settleForFile(native *native.NativeService, fileInfo *FileInfo, nodeInfo *FsNodeInfo, proveDetail *ProveDetail, proveDetails *FsProveDetails, fsSetting *FsSetting) error {
+	contract := native.ContextRef.CurrentContext().ContractAddress
 
-	return total.ValidationFee + total.SpaceFee
-}
+	var err error
 
-func calculateNodePledge(fsNodeInfo *FsNodeInfo, fsSetting *FsSetting) uint64 {
-	return fsSetting.FsGasPrice * fsSetting.GasPerGBPerBlock * fsNodeInfo.Volume
+	profit := calculateProfitForSettle(fileInfo, proveDetail, fsSetting)
+
+	log.Debugf("settle profit: %d, deposit: %d, node: %s\n", profit, fileInfo.Deposit, proveDetail.WalletAddr.ToBase58())
+	if fileInfo.Deposit < profit {
+		return errors.NewErr("Deposit < Profit, balance error!")
+	}
+
+	nodeInfo.Profit += profit
+	if err = setFsNodeInfo(native, nodeInfo); err != nil {
+		return errors.NewErr("setFsNodeInfo error:" + err.Error())
+	}
+
+	fileInfo.Deposit -= profit
+	fileInfo.ValidFlag = false
+
+	if err = setFsFileInfo(native, fileInfo); err != nil {
+		return errors.NewErr("[FS Govern] setFsFileInfo error:" + err.Error())
+	}
+
+	finishedNodes := uint64(0)
+	for i := 0; uint64(i) < proveDetails.ProveDetailNum; i++ {
+		if proveDetails.ProveDetails[i].Finished {
+			finishedNodes++
+		}
+	}
+
+	// delete from file list when first node settle
+	if finishedNodes == 1 {
+		cleanupForDeleteFile(native, fileInfo, false, true)
+	}
+
+	// delete file info and prove details when all prove finish
+	// TODO: need consider the case some node may never submit the last prove
+	if finishedNodes == fileInfo.CopyNum+1 {
+		// give back if there are remaining deposit
+		if fileInfo.Deposit > 0 {
+			err = appCallTransfer(native, utils.UsdtContractAddress, contract, fileInfo.FileOwner, fileInfo.Deposit)
+			if err != nil {
+				return errors.NewErr("[SectorProve] AppCallTransfer, transfer error!")
+			}
+		}
+		cleanupForDeleteFile(native, fileInfo, true, false)
+	}
+
+	ProveFileEvent(native, fileInfo.FileHash, nodeInfo.WalletAddr, profit)
+	return nil
 }

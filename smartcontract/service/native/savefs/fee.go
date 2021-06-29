@@ -134,3 +134,17 @@ func calcStorageFeeForOneNode(setting *FsSetting, fileSize, duration uint64) uin
 func calcStorageFee(setting *FsSetting, copyNum, fileSize, duration uint64) uint64 {
 	return (copyNum + 1) * calcStorageFeeForOneNode(setting, fileSize, duration)
 }
+
+func calculateProfitForSettle(fileInfo *FileInfo, proveDetail *ProveDetail, fsSetting *FsSetting) uint64 {
+	// first prove just indicate the whole file has been uploaded and dont calc for profit
+	// copyNum pass 0 to calculate total fee for one node
+	total := calcFee(fsSetting, proveDetail.ProveTimes-1, 0, fileInfo.FileBlockNum*fileInfo.FileBlockSize, fileInfo.ExpiredHeight-fileInfo.BlockHeight)
+	log.Debugf("prove times: %d, block num: %d, block size: %d, expire height : %d, block height : %d, valid fee: %d, storage fee : %d\n",
+		proveDetail.ProveTimes, fileInfo.FileBlockNum, fileInfo.FileBlockSize, fileInfo.ExpiredHeight, fileInfo.BlockHeight, total.ValidationFee, total.SpaceFee)
+
+	return total.Sum()
+}
+
+func calculateNodePledge(fsNodeInfo *FsNodeInfo, fsSetting *FsSetting) uint64 {
+	return fsSetting.FsGasPrice * fsSetting.GasPerGBPerBlock * fsNodeInfo.Volume
+}

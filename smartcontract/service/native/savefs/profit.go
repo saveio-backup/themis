@@ -603,7 +603,7 @@ func deleteFiles(native *native.NativeService, fileInfos []*FileInfo) error {
 		}
 
 		if fileInfo.Deposit == 0 {
-			cleanupForDeleteFile(native, fileInfo)
+			cleanupForDeleteFile(native, fileInfo, true, true)
 			continue
 		}
 
@@ -660,7 +660,7 @@ func deleteFiles(native *native.NativeService, fileInfos []*FileInfo) error {
 				return errors.NewErr("[FS Profit] FsDeleteFile SetUserSpace error!")
 			}
 		}
-		cleanupForDeleteFile(native, fileInfo)
+		cleanupForDeleteFile(native, fileInfo, true, true)
 	}
 
 	if refundAmount == 0 {
@@ -674,18 +674,22 @@ func deleteFiles(native *native.NativeService, fileInfos []*FileInfo) error {
 	return nil
 }
 
-func cleanupForDeleteFile(native *native.NativeService, fileInfo *FileInfo) {
+func cleanupForDeleteFile(native *native.NativeService, fileInfo *FileInfo, rmInfo bool, rmList bool) {
 	fileHash := fileInfo.FileHash
 
-	deleteFsFileInfo(native, fileHash)
-	deleteProveDetails(native, fileHash)
-
-	DelFileFromList(native, fileInfo.FileOwner, fileInfo.FileHash)
-	for _, primaryWalletAddr := range fileInfo.PrimaryNodes.AddrList {
-		DelFileFromPrimaryList(native, primaryWalletAddr, fileInfo.FileHash)
+	if rmInfo {
+		deleteFsFileInfo(native, fileHash)
+		deleteProveDetails(native, fileHash)
 	}
-	for _, candidateWalletAddr := range fileInfo.CandidateNodes.AddrList {
-		DelFileFromCandidateList(native, candidateWalletAddr, fileInfo.FileHash)
+
+	if rmList {
+		DelFileFromList(native, fileInfo.FileOwner, fileInfo.FileHash)
+		for _, primaryWalletAddr := range fileInfo.PrimaryNodes.AddrList {
+			DelFileFromPrimaryList(native, primaryWalletAddr, fileInfo.FileHash)
+		}
+		for _, candidateWalletAddr := range fileInfo.CandidateNodes.AddrList {
+			DelFileFromCandidateList(native, candidateWalletAddr, fileInfo.FileHash)
+		}
 	}
 }
 
