@@ -294,9 +294,17 @@ const (
 	UserspaceOps_Revoke_Revoke = uint64(UserSpaceRevoke<<4 | UserSpaceRevoke)
 )
 
-func isValidUserSpaceType(t UserSpaceType) bool {
-	switch t {
-	case UserSpaceNone, UserSpaceAdd, UserSpaceRevoke:
+func isValidUserSpaceOperation(op *UserSpaceOperation) bool {
+	switch UserSpaceType(op.Type) {
+	case UserSpaceRevoke, UserSpaceAdd:
+		if op.Value == 0 {
+			return false
+		}
+		return true
+	case UserSpaceNone:
+		if op.Value != 0 {
+			return false
+		}
 		return true
 	default:
 		return false
@@ -319,12 +327,11 @@ func getUserSpaceOperationsFromParams(params *UserSpaceParams) (uint64, error) {
 		return 0, errors.NewErr("UserSpaceParams size or block count is nil")
 	}
 
-	sizeType := UserSpaceType(params.Size.Type)
-	blockCountType := UserSpaceType(params.BlockCount.Type)
-
-	if !isValidUserSpaceType(sizeType) || !isValidUserSpaceType(blockCountType) {
-		return 0, errors.NewErr("UserSpaceParams invalid userSpaceType")
+	if !isValidUserSpaceOperation(params.Size) || !isValidUserSpaceOperation(params.BlockCount) {
+		return 0, errors.NewErr("UserSpaceParams invalid user space operation")
 	}
 
+	sizeType := UserSpaceType(params.Size.Type)
+	blockCountType := UserSpaceType(params.BlockCount.Type)
 	return combineUserSpaceTypes(sizeType, blockCountType), nil
 }
