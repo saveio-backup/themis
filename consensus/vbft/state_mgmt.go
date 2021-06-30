@@ -98,7 +98,7 @@ type StateMgr struct {
 func newStateMgr(server *Server) *StateMgr {
 	return &StateMgr{
 		server:           server,
-		syncReadyTimeout: time.Second * 10,
+		syncReadyTimeout: time.Second * 5,
 		currentState:     Init,
 		StateEventC:      make(chan *StateEvent, 16),
 		peers:            make(map[uint32]*PeerState),
