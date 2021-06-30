@@ -24,15 +24,14 @@ import (
 
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/smartcontract/service/native/auth"
-	"github.com/saveio/themis/smartcontract/service/native/cross_chain/cross_chain_manager"
-	"github.com/saveio/themis/smartcontract/service/native/cross_chain/header_sync"
-	"github.com/saveio/themis/smartcontract/service/native/cross_chain/lock_proxy"
+	"github.com/saveio/themis/smartcontract/service/native/dns"
+	"github.com/saveio/themis/smartcontract/service/native/film"
 	params "github.com/saveio/themis/smartcontract/service/native/global_params"
 	"github.com/saveio/themis/smartcontract/service/native/governance"
-	"github.com/saveio/themis/smartcontract/service/native/ong"
-	"github.com/saveio/themis/smartcontract/service/native/ont"
-	"github.com/saveio/themis/smartcontract/service/native/ontfs"
+	"github.com/saveio/themis/smartcontract/service/native/micropayment"
 	"github.com/saveio/themis/smartcontract/service/native/ontid"
+	"github.com/saveio/themis/smartcontract/service/native/savefs"
+	"github.com/saveio/themis/smartcontract/service/native/usdt"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 	"github.com/saveio/themis/smartcontract/service/neovm"
 	vm "github.com/saveio/themis/vm/neovm"
@@ -43,16 +42,15 @@ var (
 )
 
 func init() {
-	ong.InitOng()
-	ont.InitOnt()
+	usdt.InitUsdt()
 	params.InitGlobalParams()
 	ontid.Init()
 	auth.Init()
 	governance.InitGovernance()
-	cross_chain_manager.InitCrossChain()
-	header_sync.InitHeaderSync()
-	lock_proxy.InitLockProxy()
-	ontfs.InitFs()
+	micropayment.InitMicroPay()
+	savefs.InitFs()
+	dns.InitDNS()
+	film.InitFilm()
 }
 
 func InitBytes(addr common.Address, method string) []byte {

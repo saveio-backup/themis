@@ -19,32 +19,58 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"math/big"
 
 	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/common/serialization"
+	"github.com/saveio/themis/vm/neovm/types"
 )
+
+func WriteVarUint(w io.Writer, value uint64) error {
+	if err := serialization.WriteVarBytes(w, types.BigIntToBytes(big.NewInt(int64(value)))); err != nil {
+		return fmt.Errorf("serialize value error:%v", err)
+	}
+	return nil
+}
+
+func ReadVarUint(r io.Reader) (uint64, error) {
+	value, err := serialization.ReadVarBytes(r)
+	if err != nil {
+		return 0, fmt.Errorf("deserialize value error:%v", err)
+	}
+	v := types.BigIntFromBytes(value)
+	if v.Cmp(big.NewInt(0)) < 0 {
+		return 0, fmt.Errorf("%s", "value should not be a negative number.")
+	}
+	return v.Uint64(), nil
+}
+
+func WriteAddress(w io.Writer, address common.Address) error {
+	if err := serialization.WriteVarBytes(w, address[:]); err != nil {
+		return fmt.Errorf("serialize value error:%v", err)
+	}
+	return nil
+}
+
+func ReadAddress(r io.Reader) (common.Address, error) {
+	from, err := serialization.ReadVarBytes(r)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("[State] deserialize from error:%v", err)
+	}
+	return common.AddressParseFromBytes(from)
+}
 
 func EncodeAddress(sink *common.ZeroCopySink, addr common.Address) (size uint64) {
 	return sink.WriteVarBytes(addr[:])
 }
 
 func EncodeVarUint(sink *common.ZeroCopySink, value uint64) (size uint64) {
-	return sink.WriteVarBytes(common.BigIntToNeoBytes(big.NewInt(int64(value))))
+	return sink.WriteVarBytes(types.BigIntToBytes(big.NewInt(int64(value))))
 }
 
-func EncodeVarBytes(sink *common.ZeroCopySink, v []byte) (size uint64) {
-	return sink.WriteVarBytes(v)
-}
-
-func EncodeString(sink *common.ZeroCopySink, str string) (size uint64) {
-	return sink.WriteVarBytes([]byte(str))
-}
-
-func EncodeBool(sink *common.ZeroCopySink, value bool) {
-	sink.WriteBool(value)
-}
 func DecodeVarUint(source *common.ZeroCopySource) (uint64, error) {
 	value, _, irregular, eof := source.NextVarBytes()
 	if eof {
@@ -53,7 +79,7 @@ func DecodeVarUint(source *common.ZeroCopySource) (uint64, error) {
 	if irregular {
 		return 0, common.ErrIrregularData
 	}
-	v := common.BigIntFromNeoBytes(value)
+	v := types.BigIntFromBytes(value)
 	if v.Cmp(big.NewInt(0)) < 0 {
 		return 0, fmt.Errorf("%s", "value should not be a negative number.")
 	}
@@ -71,8 +97,28 @@ func DecodeAddress(source *common.ZeroCopySource) (common.Address, error) {
 
 	return common.AddressParseFromBytes(from)
 }
-func DecodeVarBytes(source *common.ZeroCopySource) ([]byte, error) {
-	data, _, irregular, eof := source.NextVarBytes()
+
+func WriteBytes(w io.Writer, b []byte) error {
+	if err := serialization.WriteVarBytes(w, b[:]); err != nil {
+		return fmt.Errorf("serialize value error:%v", err)
+	}
+	return nil
+}
+
+func ReadBytes(r io.Reader) ([]byte, error) {
+	from, err := serialization.ReadVarBytes(r)
+	if err != nil {
+		return nil, fmt.Errorf("[State] deserialize from error:%v", err)
+	}
+	return from, nil
+}
+
+func EncodeBytes(sink *common.ZeroCopySink, b []byte) (size uint64) {
+	return sink.WriteVarBytes(b[:])
+}
+
+func DecodeBytes(source *common.ZeroCopySource) ([]byte, error) {
+	from, _, irregular, eof := source.NextVarBytes()
 	if eof {
 		return nil, io.ErrUnexpectedEOF
 	}
@@ -80,40 +126,53 @@ func DecodeVarBytes(source *common.ZeroCopySource) ([]byte, error) {
 		return nil, common.ErrIrregularData
 	}
 
-	return data, nil
+	return from, nil
 }
-func DecodeUint64(source *common.ZeroCopySource) (uint64, error) {
-	data, eof := source.NextUint64()
-	if eof {
-		return 0, io.ErrUnexpectedEOF
+
+func WriteBool(w io.Writer, b bool) error {
+	var val []byte
+	if b {
+		val = BYTE_TRUE
+	} else {
+		val = BYTE_FALSE
 	}
-	return data, nil
-}
-func DecodeUint32(source *common.ZeroCopySource) (uint32, error) {
-	data, eof := source.NextUint32()
-	if eof {
-		return 0, io.ErrUnexpectedEOF
+	if err := serialization.WriteVarBytes(w, val); err != nil {
+		return fmt.Errorf("serialize value error:%v", err)
 	}
-	return data, nil
+	return nil
 }
+
+func ReadBool(r io.Reader) (bool, error) {
+	from, err := serialization.ReadVarBytes(r)
+	if err != nil {
+		return false, fmt.Errorf("[State] deserialize from error:%v", err)
+	}
+	if bytes.Compare(from, BYTE_TRUE) == 0 {
+		return true, nil
+	}
+	return false, nil
+}
+
+func EncodeBool(sink *common.ZeroCopySink, b bool) {
+	if b {
+		sink.WriteVarBytes(BYTE_TRUE)
+	} else {
+		sink.WriteVarBytes(BYTE_FALSE)
+	}
+}
+
 func DecodeBool(source *common.ZeroCopySource) (bool, error) {
-	data, irregular, eof := source.NextBool()
+	data, _, irregular, eof := source.NextVarBytes()
+	var from bool
+	if bytes.Compare(data, BYTE_TRUE) == 0 {
+		from = true
+	}
 	if eof {
 		return false, io.ErrUnexpectedEOF
 	}
 	if irregular {
 		return false, common.ErrIrregularData
 	}
-	return data, nil
-}
-func DecodeString(source *common.ZeroCopySource) (string, error) {
-	data, _, irregular, eof := source.NextString()
-	if eof {
-		return "", io.ErrUnexpectedEOF
-	}
-	if irregular {
-		return "", common.ErrIrregularData
-	}
 
-	return data, nil
+	return from, nil
 }

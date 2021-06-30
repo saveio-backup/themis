@@ -560,6 +560,8 @@ func Withdraw(native *native.NativeService) ([]byte, error) {
 }
 
 func verifyToken(native *native.NativeService, contractAddr common.Address, caller []byte, fn string, keyNo uint64) (bool, error) {
+	//skip ONT ID checking
+	return true, nil
 	//check caller's identity
 	ret, err := verifySig(native, caller, keyNo)
 	if err != nil {

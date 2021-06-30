@@ -18,9 +18,11 @@
 package utils
 
 import (
+	"bytes"
+
 	"fmt"
 
-	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/common/serialization"
 	cstates "github.com/saveio/themis/core/states"
 	"github.com/saveio/themis/errors"
 	"github.com/saveio/themis/smartcontract/service/native"
@@ -46,31 +48,37 @@ func (this *LinkedlistNode) GetPayload() []byte {
 
 func makeLinkedlistNode(next []byte, prev []byte, payload []byte) ([]byte, error) {
 	node := &LinkedlistNode{next: next, prev: prev, payload: payload}
-	node_bytes, err := node.Serialization()
+	node_bytes, err := node.Serialize()
 	if err != nil {
 		return nil, err
 	}
 	return node_bytes, nil
 }
-func (this *LinkedlistNode) Serialization() ([]byte, error) {
-	sink := common.NewZeroCopySink(nil)
-	sink.WriteVarBytes(this.next)
-	sink.WriteVarBytes(this.prev)
-	sink.WriteVarBytes(this.payload)
-	return sink.Bytes(), nil
+func (this *LinkedlistNode) Serialize() ([]byte, error) {
+	bf := new(bytes.Buffer)
+	if err := serialization.WriteVarBytes(bf, this.next); err != nil {
+		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[linked list] serialize next error!")
+	}
+	if err := serialization.WriteVarBytes(bf, this.prev); err != nil {
+		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[linked list] serialize prev error!")
+	}
+	if err := serialization.WriteVarBytes(bf, this.payload); err != nil {
+		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[linked list] serialize payload error!")
+	}
+	return bf.Bytes(), nil
 }
 
-func (this *LinkedlistNode) Deserialization(r []byte) error {
-	source := common.NewZeroCopySource(r)
-	next, err := DecodeVarBytes(source)
+func (this *LinkedlistNode) Deserialize(r []byte) error {
+	bf := bytes.NewReader(r)
+	next, err := serialization.ReadVarBytes(bf)
 	if err != nil {
 		return errors.NewDetailErr(err, errors.ErrNoCode, "[linked list] deserialize next error!")
 	}
-	prev, err := DecodeVarBytes(source)
+	prev, err := serialization.ReadVarBytes(bf)
 	if err != nil {
 		return errors.NewDetailErr(err, errors.ErrNoCode, "[linked list] deserialize prev error!")
 	}
-	payload, err := DecodeVarBytes(source)
+	payload, err := serialization.ReadVarBytes(bf)
 	if err != nil {
 		return errors.NewDetailErr(err, errors.ErrNoCode, "[linked list] deserialize payload error!")
 	}
@@ -111,7 +119,7 @@ func getListNode(native *native.NativeService, index []byte, item []byte) (*Link
 	if len(rawNode) == 0 {
 		return nil, nil
 	}
-	err = node.Deserialization(rawNode)
+	err = node.Deserialize(rawNode)
 	if err != nil {
 		//log.Tracef("[index: %s, item: %s] error %s", hex.EncodeToString(index), hex.EncodeToString(item), err)
 		return nil, err
@@ -264,7 +272,6 @@ func LinkedlistGetHead(native *native.NativeService, index []byte) ([]byte, erro
 	}
 	return head, nil
 }
-
 func LinkedlistGetNumOfItems(native *native.NativeService, index []byte) (int, error) {
 	n := 0
 	head, err := getListHead(native, index)
@@ -281,22 +288,4 @@ func LinkedlistGetNumOfItems(native *native.NativeService, index []byte) (int, e
 		q = qnode.next
 	}
 	return n, nil
-}
-
-func LinkedlistDeleteAll(native *native.NativeService, index []byte) error {
-	head, err := getListHead(native, index)
-	if err != nil {
-		return err
-	}
-	q := head
-	for q != nil {
-		qnode, err := getListNode(native, index, q)
-		if err != nil {
-			return err
-		}
-		native.CacheDB.Delete(append(index, q...))
-		q = qnode.next
-	}
-	native.CacheDB.Delete(index)
-	return nil
 }

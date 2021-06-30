@@ -20,6 +20,7 @@ package event
 
 import (
 	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/vm/neovm/types"
 )
 
 const (
@@ -27,9 +28,17 @@ const (
 	CONTRACT_STATE_SUCCESS byte = 1
 )
 
+// NotifyEventArgs describe smart contract event notify arguments struct
+type NotifyEventArgs struct {
+	ContractAddress common.Address
+	States          types.StackItems
+}
+
 // NotifyEventInfo describe smart contract event notify info struct
 type NotifyEventInfo struct {
 	ContractAddress common.Address
+	EventIdentifier uint32
+	Addresses       []common.Address // addresses involved in the notify
 	States          interface{}
 }
 

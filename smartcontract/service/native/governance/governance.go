@@ -27,12 +27,12 @@ import (
 	"math"
 	"sort"
 
-	"github.com/saveio/themis/crypto/keypair"
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/config"
 	"github.com/saveio/themis/common/constants"
 	cstates "github.com/saveio/themis/core/states"
 	"github.com/saveio/themis/core/types"
+	"github.com/saveio/themis/crypto/keypair"
 	"github.com/saveio/themis/smartcontract/service/native"
 	"github.com/saveio/themis/smartcontract/service/native/global_params"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
@@ -109,7 +109,7 @@ const (
 )
 
 // candidate fee must >= 1 ONG
-var MIN_CANDIDATE_FEE = uint64(math.Pow(10, constants.ONG_DECIMALS))
+var MIN_CANDIDATE_FEE = uint64(math.Pow(10, constants.USDT_DECIMALS))
 var AUTHORIZE_INFO_POOL = []byte{118, 111, 116, 101, 73, 110, 102, 111, 80, 111, 111, 108}
 var Xi = []uint32{
 	0, 100000, 200000, 300000, 400000, 500000, 600000, 700000, 800000, 900000, 1000000, 1100000, 1200000, 1300000, 1400000,
@@ -130,17 +130,16 @@ func InitGovernance() {
 //Register methods of governance contract
 func RegisterGovernanceContract(native *native.NativeService) {
 	native.Register(REGISTER_CANDIDATE, RegisterCandidate)
-	native.Register(REGISTER_CANDIDATE_TRANSFER_FROM, RegisterCandidateTransferFrom)
+	//native.Register(REGISTER_CANDIDATE_TRANSFER_FROM, RegisterCandidateTransferFrom)
 	native.Register(UNREGISTER_CANDIDATE, UnRegisterCandidate)
-	native.Register(AUTHORIZE_FOR_PEER, AuthorizeForPeer)
-	native.Register(AUTHORIZE_FOR_PEER_TRANSFER_FROM, AuthorizeForPeerTransferFrom)
-	native.Register(UNAUTHORIZE_FOR_PEER, UnAuthorizeForPeer)
+	//native.Register(AUTHORIZE_FOR_PEER, AuthorizeForPeer)
+	//native.Register(AUTHORIZE_FOR_PEER_TRANSFER_FROM, AuthorizeForPeerTransferFrom)
+	//native.Register(UNAUTHORIZE_FOR_PEER, UnAuthorizeForPeer)
 	native.Register(WITHDRAW, Withdraw)
 	native.Register(QUIT_NODE, QuitNode)
-	native.Register(WITHDRAW_ONG, WithdrawOng)
-	native.Register(CHANGE_MAX_AUTHORIZATION, ChangeMaxAuthorization)
-	native.Register(SET_PEER_COST, SetPeerCost)
-	native.Register(SET_FEE_PERCENTAGE, SetFeePercentage)
+	//native.Register(WITHDRAW_ONG, WithdrawOng)
+	//native.Register(CHANGE_MAX_AUTHORIZATION, ChangeMaxAuthorization)
+	//native.Register(SET_PEER_COST, SetPeerCost)
 	native.Register(WITHDRAW_FEE, WithdrawFee)
 	native.Register(ADD_INIT_POS, AddInitPos)
 	native.Register(REDUCE_INIT_POS, ReduceInitPos)
@@ -1086,14 +1085,11 @@ func UpdateConfig(native *native.NativeService) ([]byte, error) {
 	if configuration.BlockMsgDelay < 5000 {
 		return utils.BYTE_FALSE, fmt.Errorf("updateConfig. BlockMsgDelay must >= 5000")
 	}
-	if configuration.HashMsgDelay < 5000 {
-		return utils.BYTE_FALSE, fmt.Errorf("updateConfig. HashMsgDelay must >= 5000")
+	if configuration.HashMsgDelay < 500 {
+		return utils.BYTE_FALSE, fmt.Errorf("updateConfig. HashMsgDelay must >= 500")
 	}
-	if configuration.PeerHandshakeTimeout < 10 {
-		return utils.BYTE_FALSE, fmt.Errorf("updateConfig. PeerHandshakeTimeout must >= 10")
-	}
-	if configuration.MaxBlockChangeView < 10000 {
-		return utils.BYTE_FALSE, fmt.Errorf("updateConfig. MaxBlockChangeView must >= 10000")
+	if configuration.PeerHandshakeTimeout < 1 {
+		return utils.BYTE_FALSE, fmt.Errorf("updateConfig. PeerHandshakeTimeout must >= 1")
 	}
 
 	preConfig := &PreConfig{
@@ -1508,10 +1504,10 @@ func WithdrawFee(native *native.NativeService) ([]byte, error) {
 	}
 	fee := splitFeeAddress.Amount
 
-	//ong transfer
-	err = appCallTransferOng(native, utils.GovernanceContractAddress, params.Address, fee)
+	//revenue transfer
+	err = appCallTransferRevenue(native, utils.GovernanceContractAddress, params.Address, fee)
 	if err != nil {
-		return utils.BYTE_FALSE, fmt.Errorf("appCallTransferOng, ong transfer error: %v", err)
+		return utils.BYTE_FALSE, fmt.Errorf("appCallTransferRevenue, usdt transfer error: %v", err)
 	}
 
 	//delete from splitFeeAddress

@@ -1,0 +1,325 @@
+package pdp
+
+import (
+	"crypto/rand"
+	"fmt"
+	rand2 "math/rand"
+	"testing"
+)
+
+type FileOption struct {
+	fileId       FileID
+	challengeNum int
+	blockNum     int
+	allTag       bool
+}
+
+func TestPDP(t *testing.T) {
+	files := []FileOption{
+		{
+			fileId:       generateFileId(),
+			challengeNum: 2,
+			blockNum:     100,
+		},
+		{
+			fileId:       generateFileId(),
+			challengeNum: 3,
+			blockNum:     200,
+		},
+		{
+			fileId:       generateFileId(),
+			challengeNum: 1,
+			blockNum:     20,
+		},
+	}
+	for _, file := range files {
+		err := doPDPTest(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func doPDPTest(file FileOption) error {
+	p := NewPdp(0)
+
+	fileData, err := generateFileData(file, p)
+	if err != nil {
+		return err
+	}
+
+	proof, err := p.GenerateProofForFile(0, fileData.blocksForPdp, file.fileId, fileData.challenges)
+	if err != nil {
+		return fmt.Errorf("generateProof error %s", err)
+	}
+
+	// use another instance for verification
+	p2 := NewPdp(0)
+	ok := p2.VerifyProofForFile(0, proof, file.fileId, fileData.tagsForPdp, fileData.challenges)
+	if !ok {
+		return fmt.Errorf("verify proof nok")
+	}
+	return nil
+}
+
+func TestPDPMerklePath(t *testing.T) {
+	files := []FileOption{
+		{
+			fileId:       generateFileId(),
+			challengeNum: 2,
+			blockNum:     100,
+		},
+		{
+			fileId:       generateFileId(),
+			challengeNum: 3,
+			blockNum:     200,
+		},
+		{
+			fileId:       generateFileId(),
+			challengeNum: 1,
+			blockNum:     20,
+		},
+	}
+	for _, file := range files {
+		err := doPDPMerklePathTest(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func doPDPMerklePathTest(file FileOption) error {
+	return nil
+}
+
+/*
+func doPDPMerklePathTest(file FileOption) error {
+	var fileId FileID
+	rand.Read(fileId[:])
+
+	p := NewPdp(0)
+
+	blocks := make([]Block, 0)
+	tags := make([]Tag, 0)
+	nodes := make([]*MerkleNode, 0)
+	for i := 0; i < blockNum; i++ {
+		data := make([]byte, blockLen)
+		rand.Read(data)
+		blocks = append(blocks, data)
+
+		tag, err := p.GenerateTag([]Block{data}, fileId)
+		if err != nil {
+			return fmt.Errorf("GenerateTag error %s", err)
+		}
+		tags = append(tags, tag...)
+
+		node := InitNodeWithData(tag[0][:], uint64(i))
+		nodes = append(nodes, node)
+	}
+
+	err := p.InitMerkleTreeForFile(fileId, nodes)
+	if err != nil {
+		return fmt.Errorf("InitMerkleTree error %s", err)
+	}
+
+	rootHash, err := p.GetRootHashForFile(fileId)
+	if err != nil {
+		return fmt.Errorf("GetRootHash error %s", err)
+	}
+
+	challenges := make([]Challenge, 0)
+	for i := 0; i < challengeNum; i++ {
+		challenge := Challenge{
+			Index: uint32(i),
+			Rand:  uint32(i * i),
+		}
+		challenges = append(challenges, challenge)
+	}
+
+	blocksForPdp := make([]Block, 0)
+	tagsForPdp := make([]Tag, 0)
+	for _, challenge := range challenges {
+		blocksForPdp = append(blocksForPdp, blocks[challenge.Index])
+		tagsForPdp = append(tagsForPdp, tags[challenge.Index])
+	}
+
+	proof, mpath, err := p.GenerateProofWithMerklePathForFile(0, blocksForPdp, fileId, tagsForPdp, challenges)
+	if err != nil {
+		return fmt.Errorf("generateProof error %s", err)
+	}
+
+	// use another instance for verification
+	p2 := NewPdp(0)
+	err = p2.VerifyProofWithMerklePathForFile(0, proof, fileId, tagsForPdp, challenges, mpath, rootHash)
+	if err != nil {
+		return fmt.Errorf("VerifyProofWithMerklePath error %s", err)
+	}
+	return nil
+}
+*/
+
+func TestMultiPDP(t *testing.T) {
+	files := []FileOption{
+		{
+			fileId:       generateFileId(),
+			challengeNum: 2,
+			blockNum:     100,
+		},
+		{
+			fileId:       generateFileId(),
+			challengeNum: 3,
+			blockNum:     200,
+		},
+		{
+			fileId:       generateFileId(),
+			challengeNum: 1,
+			blockNum:     20,
+		},
+	}
+
+	err := doMultiPDPTest(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func doMultiPDPTest(files []FileOption) error {
+	p := NewPdp(0)
+
+	testData := make([]*FileData, 0)
+	for _, option := range files {
+		fileData, err := generateFileData(option, p)
+		if err != nil {
+			return err
+		}
+		testData = append(testData, fileData)
+		/*
+			blocks := make([]Block, 0)
+			tags := make([]Tag, 0)
+			for i := 0; i < file.blockNum; i++ {
+
+				data := make([]byte, BLOCK_LENGTH)
+				rand.Read(data)
+
+				blocks = append(blocks, data)
+
+				tag, err := p.GenerateTag([]Block{data}, file.fileId)
+				if err != nil {
+					return fmt.Errorf("GenerateTag error %s", err)
+				}
+
+				tags = append(tags, tag...)
+			}
+
+			challenges := make([]Challenge, 0)
+			for i := 0; i < file.challengeNum; i++ {
+				challenge := Challenge{
+					Index: uint32(rand2.Int31n(int32(file.challengeNum))),
+					Rand:  rand2.Uint32(),
+				}
+				challenges = append(challenges, challenge)
+			}
+			blocksForPdp := make([]Block, 0)
+			tagsForPdp := make([]Tag, 0)
+			for _, challenge := range challenges {
+				blocksForPdp = append(blocksForPdp, blocks[challenge.Index])
+				tagsForPdp = append(tagsForPdp, tags[challenge.Index])
+			}
+
+			fileData := &FileData{
+				fileId:       file.fileId,
+				blocks:       blocks,
+				tags:         tags,
+				blocksForPdp: blocksForPdp,
+				tagsForPdp:   tagsForPdp,
+				challenges:   challenges,
+			}
+
+		*/
+
+	}
+
+	fileIds := make([]FileID, 0)
+	tagsForPdp := make([]Tag, 0)
+	blocksForPdp := make([]Block, 0)
+	challenges := make([]Challenge, 0)
+
+	for _, t := range testData {
+		fileIds = append(fileIds, fillFileIDs(t.fileId, len(t.tagsForPdp))...)
+		tagsForPdp = append(tagsForPdp, t.tagsForPdp...)
+		blocksForPdp = append(blocksForPdp, t.blocksForPdp...)
+		challenges = append(challenges, t.challenges...)
+
+	}
+
+	proof, err := p.GenerateProof(0, blocksForPdp, fileIds, challenges)
+	if err != nil {
+		return fmt.Errorf("generateProof error %s", err)
+	}
+
+	// use another instance for verification
+	p2 := NewPdp(0)
+	ok := p2.VerifyProof(0, proof, fileIds, tagsForPdp, challenges)
+	if !ok {
+		return fmt.Errorf("verify proof nok")
+	}
+	return nil
+}
+
+type FileData struct {
+	fileId       FileID
+	blocks       []Block
+	tags         []Tag
+	blocksForPdp []Block
+	tagsForPdp   []Tag
+	challenges   []Challenge
+}
+
+func generateFileData(file FileOption, p *Pdp) (*FileData, error) {
+	blocks := make([]Block, 0)
+	tags := make([]Tag, 0)
+	for i := 0; i < file.blockNum; i++ {
+
+		data := make([]byte, BLOCK_LENGTH)
+		rand.Read(data)
+
+		blocks = append(blocks, data)
+
+		tag, err := p.GenerateTag([]Block{data}, file.fileId)
+		if err != nil {
+			return nil, fmt.Errorf("GenerateTag error %s", err)
+		}
+
+		tags = append(tags, tag...)
+	}
+
+	challenges := make([]Challenge, 0)
+	for i := 0; i < file.challengeNum; i++ {
+		challenge := Challenge{
+			Index: uint32(rand2.Int31n(int32(file.challengeNum))),
+			Rand:  rand2.Uint32(),
+		}
+		challenges = append(challenges, challenge)
+	}
+	blocksForPdp := make([]Block, 0)
+	tagsForPdp := make([]Tag, 0)
+	for _, challenge := range challenges {
+		blocksForPdp = append(blocksForPdp, blocks[challenge.Index])
+		tagsForPdp = append(tagsForPdp, tags[challenge.Index])
+	}
+
+	return &FileData{
+		fileId:       file.fileId,
+		blocks:       blocks,
+		tags:         tags,
+		blocksForPdp: blocksForPdp,
+		tagsForPdp:   tagsForPdp,
+		challenges:   challenges,
+	}, nil
+}
+
+func generateFileId() FileID {
+	var fileId FileID
+	rand.Read(fileId[:])
+	return fileId
+}

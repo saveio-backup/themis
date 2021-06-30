@@ -23,15 +23,15 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/saveio/themis/crypto/vrf"
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/config"
 	"github.com/saveio/themis/common/serialization"
 	vbftconfig "github.com/saveio/themis/consensus/vbft/config"
 	cstates "github.com/saveio/themis/core/states"
+	"github.com/saveio/themis/crypto/vrf"
 	"github.com/saveio/themis/smartcontract/service/native"
 	"github.com/saveio/themis/smartcontract/service/native/auth"
-	"github.com/saveio/themis/smartcontract/service/native/ont"
+	"github.com/saveio/themis/smartcontract/service/native/usdt"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
 
@@ -98,6 +98,35 @@ func putGovernanceView(native *native.NativeService, contract common.Address, go
 	return nil
 }
 
+func getGasRevenue(native *native.NativeService, contract common.Address) (*GasRevenue, error) {
+	gasRevenueBytes, err := native.CacheDB.Get(utils.ConcatKey(contract, []byte(GAS_REVENUE)))
+	if err != nil {
+		return nil, fmt.Errorf("GetGasRevenue, get gasRevenueBytes error: %v", err)
+	}
+	gasRevenue := new(GasRevenue)
+	if gasRevenueBytes == nil {
+		return nil, fmt.Errorf("GetGasRevenue, get nil gasRevenueBytes")
+	} else {
+		value, err := cstates.GetValueFromRawStorageItem(gasRevenueBytes)
+		if err != nil {
+			return nil, fmt.Errorf("GetGasRevenue, deserialize from raw storage item err:%v", err)
+		}
+		if err := gasRevenue.Deserialize(bytes.NewBuffer(value)); err != nil {
+			return nil, fmt.Errorf("deserialize, deserialize gasRevenue error: %v", err)
+		}
+	}
+	return gasRevenue, nil
+}
+
+func putGasRevenue(native *native.NativeService, contract common.Address, gasRevenue *GasRevenue) error {
+	bf := new(bytes.Buffer)
+	if err := gasRevenue.Serialize(bf); err != nil {
+		return fmt.Errorf("serialize, serialize gasRevenue error: %v", err)
+	}
+	native.CacheDB.Put(utils.ConcatKey(contract, []byte(GAS_REVENUE)), cstates.GenRawStorageItem(bf.Bytes()))
+	return nil
+}
+
 func GetView(native *native.NativeService, contract common.Address) (uint32, error) {
 	governanceView, err := GetGovernanceView(native, contract)
 	if err != nil {
@@ -106,30 +135,38 @@ func GetView(native *native.NativeService, contract common.Address) (uint32, err
 	return governanceView.View, nil
 }
 
+func appCallTransferRevenue(native *native.NativeService, from common.Address, to common.Address, amount uint64) error {
+	err := appCallTransfer(native, utils.UsdtContractAddress, from, to, amount)
+	if err != nil {
+		return fmt.Errorf("appCallTransferOnt, appCallTransfer error: %v", err)
+	}
+
+	contract := native.ContextRef.CurrentContext().ContractAddress
+	gasRevenue, err := getGasRevenue(native, contract)
+	if err != nil {
+		return fmt.Errorf("appCallTransferOnt, appCallTransfer error: %v", err)
+	}
+	gasRevenue.Total -= amount
+	putGasRevenue(native, contract, gasRevenue)
+	return nil
+}
+
 func appCallTransferOnt(native *native.NativeService, from common.Address, to common.Address, amount uint64) error {
-	err := appCallTransfer(native, utils.OntContractAddress, from, to, amount)
+	err := appCallTransfer(native, utils.UsdtContractAddress, from, to, amount)
 	if err != nil {
 		return fmt.Errorf("appCallTransferOnt, appCallTransfer error: %v", err)
 	}
 	return nil
 }
 
-func appCallTransferOng(native *native.NativeService, from common.Address, to common.Address, amount uint64) error {
-	err := appCallTransfer(native, utils.OngContractAddress, from, to, amount)
-	if err != nil {
-		return fmt.Errorf("appCallTransferOng, appCallTransfer error: %v", err)
-	}
-	return nil
-}
-
 func appCallTransfer(native *native.NativeService, contract common.Address, from common.Address, to common.Address, amount uint64) error {
-	var sts []ont.State
-	sts = append(sts, ont.State{
+	var sts []usdt.State
+	sts = append(sts, usdt.State{
 		From:  from,
 		To:    to,
 		Value: amount,
 	})
-	transfers := ont.Transfers{
+	transfers := usdt.Transfers{
 		States: sts,
 	}
 
@@ -140,23 +177,15 @@ func appCallTransfer(native *native.NativeService, contract common.Address, from
 }
 
 func appCallTransferFromOnt(native *native.NativeService, sender common.Address, from common.Address, to common.Address, amount uint64) error {
-	err := appCallTransferFrom(native, utils.OntContractAddress, sender, from, to, amount)
+	err := appCallTransferFrom(native, utils.UsdtContractAddress, sender, from, to, amount)
 	if err != nil {
 		return fmt.Errorf("appCallTransferFromOnt, appCallTransferFrom error: %v", err)
 	}
 	return nil
 }
 
-func appCallTransferFromOng(native *native.NativeService, sender common.Address, from common.Address, to common.Address, amount uint64) error {
-	err := appCallTransferFrom(native, utils.OngContractAddress, sender, from, to, amount)
-	if err != nil {
-		return fmt.Errorf("appCallTransferFromOng, appCallTransferFrom error: %v", err)
-	}
-	return nil
-}
-
 func appCallTransferFrom(native *native.NativeService, contract common.Address, sender common.Address, from common.Address, to common.Address, amount uint64) error {
-	params := &ont.TransferFrom{
+	params := &usdt.TransferFrom{
 		Sender: sender,
 		From:   from,
 		To:     to,
@@ -167,25 +196,6 @@ func appCallTransferFrom(native *native.NativeService, contract common.Address, 
 		return fmt.Errorf("appCallTransferFrom, appCall error: %v", err)
 	}
 	return nil
-}
-
-func appCallUnboundGovernanceOng(native *native.NativeService) error {
-	if _, err := native.NativeCall(utils.OntContractAddress, ont.UNBOUND_ONG_TO_GOVERNANCE, []byte{}); err != nil {
-		return fmt.Errorf("appCallUnboundGovernanceOng, appCall error: %v", err)
-	}
-	return nil
-}
-
-func getOngBalance(native *native.NativeService, address common.Address) (uint64, error) {
-	sink := common.ZeroCopySink{}
-	utils.EncodeAddress(&sink, address)
-
-	value, err := native.NativeCall(utils.OngContractAddress, "balanceOf", sink.Bytes())
-	if err != nil {
-		return 0, fmt.Errorf("getOngBalance, appCall error: %v", err)
-	}
-	balance := common.BigIntFromNeoBytes(value).Uint64()
-	return balance, nil
 }
 
 func splitCurve(native *native.NativeService, contract common.Address, pos uint64, avg uint64, yita uint64) (uint64, error) {
@@ -327,11 +337,11 @@ func CheckVBFTConfig(configuration *config.VBFTConfig) error {
 	if configuration.BlockMsgDelay < 5000 {
 		return fmt.Errorf("initConfig. BlockMsgDelay must >= 5000")
 	}
-	if configuration.HashMsgDelay < 5000 {
-		return fmt.Errorf("initConfig. HashMsgDelay must >= 5000")
+	if configuration.HashMsgDelay < 500 {
+		return fmt.Errorf("initConfig. HashMsgDelay must >= 500")
 	}
-	if configuration.PeerHandshakeTimeout < 10 {
-		return fmt.Errorf("initConfig. PeerHandshakeTimeout must >= 10")
+	if configuration.PeerHandshakeTimeout < 1 {
+		return fmt.Errorf("initConfig. PeerHandshakeTimeout must >= 1")
 	}
 	if configuration.MinInitStake < 10000 {
 		return fmt.Errorf("initConfig. MinInitStake must >= 10000")
@@ -626,6 +636,10 @@ func putSplitCurve(native *native.NativeService, contract common.Address, splitC
 }
 
 func appCallInitContractAdmin(native *native.NativeService, adminOntID []byte) error {
+	//skip ONTID logic
+	return nil
+
+	bf := new(bytes.Buffer)
 	params := &auth.InitContractAdminParam{
 		AdminOntID: adminOntID,
 	}
