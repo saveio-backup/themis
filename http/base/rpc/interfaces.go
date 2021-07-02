@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 package rpc
@@ -21,18 +21,26 @@ package rpc
 import (
 	"encoding/hex"
 
-	"github.com/ontio/ontology/common"
-	"github.com/ontio/ontology/common/config"
-	"github.com/ontio/ontology/common/log"
-	"github.com/ontio/ontology/core/payload"
-	scom "github.com/ontio/ontology/core/store/common"
-	"github.com/ontio/ontology/core/types"
-	ontErrors "github.com/ontio/ontology/errors"
-	bactor "github.com/ontio/ontology/http/base/actor"
-	bcomn "github.com/ontio/ontology/http/base/common"
-	berr "github.com/ontio/ontology/http/base/error"
-	"github.com/ontio/ontology/smartcontract/service/native/utils"
+	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/common/config"
+	"github.com/saveio/themis/common/log"
+	"github.com/saveio/themis/core/payload"
+	scom "github.com/saveio/themis/core/store/common"
+	"github.com/saveio/themis/core/types"
+	ontErrors "github.com/saveio/themis/errors"
+	bactor "github.com/saveio/themis/http/base/actor"
+	bcomn "github.com/saveio/themis/http/base/common"
+	berr "github.com/saveio/themis/http/base/error"
+	"github.com/saveio/themis/http/base/sys"
+	"github.com/saveio/themis/smartcontract/event"
+	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
+
+//get system status score
+func GetSysStatusScore(params []interface{}) map[string]interface{} {
+	log.Infof("GetSysStatusScore score: %d", sys.SysScore)
+	return responseSuccess(sys.SysScore)
+}
 
 //get best block hash
 func GetBestBlockHash(params []interface{}) map[string]interface{} {
@@ -411,6 +419,123 @@ func GetSmartCodeEvent(params []interface{}) map[string]interface{} {
 		return responsePack(berr.INVALID_PARAMS, "")
 	}
 	return responsePack(berr.INVALID_PARAMS, "")
+}
+
+func GetSmartCodeEventByEventId(params []interface{}) map[string]interface{} {
+	if !config.DefConfig.Common.EnableEventLog {
+		return responsePack(berr.INVALID_METHOD, "")
+	}
+	if len(params) != 3 {
+		return responsePack(berr.INVALID_PARAMS, nil)
+	}
+
+	addr, ok := params[0].(string)
+	if !ok {
+		return responsePack(berr.INVALID_PARAMS, "")
+	}
+	contractAddr, err := bcomn.GetAddress(addr)
+	if err != nil {
+		return responsePack(berr.INVALID_PARAMS, "")
+	}
+
+	addr, ok = params[1].(string)
+	if !ok {
+		return responsePack(berr.INVALID_PARAMS, "")
+	}
+	address, err := bcomn.GetAddress(addr)
+	if err != nil {
+		return responsePack(berr.INVALID_PARAMS, "")
+	}
+
+	eventId, ok := params[2].(float64)
+	if !ok {
+		return responsePack(berr.INVALID_PARAMS, "")
+	}
+
+	eventInfos, err := bactor.GetEventNotifyByEventId(contractAddr, address, uint32(eventId))
+	if err != nil {
+		if scom.ErrNotFound == err {
+			return responseSuccess(nil)
+		}
+		return responsePack(berr.INTERNAL_ERROR, "")
+	}
+
+	eInfos := make([]*bcomn.ExecuteNotify, 0, len(eventInfos))
+	for _, eventInfo := range eventInfos {
+		_, notify := bcomn.GetExecuteNotify(eventInfo)
+		eInfos = append(eInfos, &notify)
+	}
+	return responseSuccess(eInfos)
+}
+
+func GetSmartCodeEventByEventIdAndHeights(params []interface{}) map[string]interface{} {
+	if !config.DefConfig.Common.EnableEventLog {
+		return responsePack(berr.INVALID_METHOD, "")
+	}
+	if len(params) != 5 {
+		return responsePack(berr.INVALID_PARAMS, nil)
+	}
+
+	addr, ok := params[0].(string)
+	if !ok {
+		return responsePack(berr.INVALID_PARAMS, "")
+	}
+	contractAddr, err := bcomn.GetAddress(addr)
+	if err != nil {
+		return responsePack(berr.INVALID_PARAMS, "")
+	}
+
+	eventId, ok := params[1].(float64)
+	if !ok {
+		return responsePack(berr.INVALID_PARAMS, "")
+	}
+	startHeight, ok := params[2].(float64)
+	if !ok {
+		return responsePack(berr.INVALID_PARAMS, "")
+	}
+	endHeight, ok := params[3].(float64)
+	if !ok {
+		return responsePack(berr.INVALID_PARAMS, "")
+	}
+
+	addrStr, _ := params[4].(string)
+	var address []byte
+	if len(addrStr) > 0 {
+		addr, err := bcomn.GetAddress(addrStr)
+		if err != nil {
+			return responsePack(berr.INVALID_PARAMS, "")
+		}
+		address = make([]byte, len(addr))
+		copy(address[:], addr[:])
+	}
+
+	eventInfos := make([]*event.ExecuteNotify, 0)
+	if contractAddr.ToBase58() == utils.UsdtContractAddress.ToBase58() && len(address) == 0 && startHeight != 0 && endHeight != 0 && endHeight-startHeight < 20000 {
+		for i := startHeight; i < endHeight; i++ {
+			eventInfo, err := bactor.GetEventNotifyByHeight(uint32(i))
+			if err != nil || len(eventInfo) == 0 {
+				continue
+			}
+			eventInfos = append(eventInfos, eventInfo...)
+		}
+	} else {
+		eventInfos, err = bactor.GetEventNotifyByEventIdAndHeights(contractAddr, address, uint32(eventId), uint32(startHeight), uint32(endHeight))
+		if err != nil {
+			if scom.ErrNotFound == err {
+				return responseSuccess(nil)
+			}
+			responsePack(berr.INTERNAL_ERROR, "")
+		}
+	}
+	eInfos := make([]*bcomn.ExecuteNotify, 0, len(eventInfos))
+	for _, eventInfo := range eventInfos {
+		_, notify := bcomn.GetExecuteNotify(eventInfo)
+		if len(notify.Notify) == 0 {
+			continue
+		}
+		eInfos = append(eInfos, &notify)
+	}
+	return responseSuccess(eInfos)
 }
 
 //get block height by transaction hash

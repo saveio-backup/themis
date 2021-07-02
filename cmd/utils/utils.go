@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 package utils
@@ -28,12 +28,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ontio/ontology/common/constants"
+	"github.com/saveio/themis/common/constants"
 )
 
 const (
-	PRECISION_ONG = 9
-	PRECISION_ONT = 0
+	PRECISION_USDT = 9
 )
 
 //FormatAssetAmount return asset amount multiplied by math.Pow10(precision) to raw float string
@@ -65,32 +64,19 @@ func ParseAssetAmount(rawAmount string, precision byte) uint64 {
 	amount, _ := bf.Uint64()
 	return amount
 }
-
-func FormatOng(amount uint64) string {
-	return FormatAssetAmount(amount, PRECISION_ONG)
+func FormatUsdt(amount uint64) string {
+	return FormatAssetAmount(amount, PRECISION_USDT)
 }
 
-func ParseOng(rawAmount string) uint64 {
-	return ParseAssetAmount(rawAmount, PRECISION_ONG)
-}
-
-func FormatOnt(amount uint64) string {
-	return FormatAssetAmount(amount, PRECISION_ONT)
-}
-
-func ParseOnt(rawAmount string) uint64 {
-	return ParseAssetAmount(rawAmount, PRECISION_ONT)
+func ParseUsdt(rawAmount string) uint64 {
+	return ParseAssetAmount(rawAmount, PRECISION_USDT)
 }
 
 func CheckAssetAmount(asset string, amount uint64) error {
 	switch strings.ToLower(asset) {
-	case "ont":
-		if amount > constants.ONT_TOTAL_SUPPLY {
-			return fmt.Errorf("amount:%d larger than ONT total supply:%d", amount, constants.ONT_TOTAL_SUPPLY)
-		}
-	case "ong":
-		if amount > constants.ONG_TOTAL_SUPPLY {
-			return fmt.Errorf("amount:%d larger than ONG total supply:%d", amount, constants.ONG_TOTAL_SUPPLY)
+	case "usdt":
+		if amount > constants.USDT_TOTAL_SUPPLY {
+			return fmt.Errorf("amount:%d larger than USDT total supply:%d", amount, constants.USDT_TOTAL_SUPPLY)
 		}
 	default:
 		return fmt.Errorf("unknown asset:%s", asset)

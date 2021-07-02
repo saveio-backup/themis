@@ -1,32 +1,31 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 package cmd
 
 import (
 	"encoding/hex"
 	"fmt"
-	"strconv"
 	"strings"
 
-	cmdcom "github.com/ontio/ontology/cmd/common"
-	"github.com/ontio/ontology/cmd/utils"
-	"github.com/ontio/ontology/common"
-	nutils "github.com/ontio/ontology/smartcontract/service/native/utils"
+	cmdcom "github.com/saveio/themis/cmd/common"
+	"github.com/saveio/themis/cmd/utils"
+	"github.com/saveio/themis/common"
+	nutils "github.com/saveio/themis/smartcontract/service/native/utils"
 	"github.com/urfave/cli"
 )
 
@@ -72,7 +71,7 @@ func sendTx(ctx *cli.Context) error {
 	PrintInfoMsg("Send transaction success.")
 	PrintInfoMsg("  TxHash:%s", txHash)
 	PrintInfoMsg("\nTip:")
-	PrintInfoMsg("  Using './ontology info status %s' to query transaction status.", txHash)
+	PrintInfoMsg("  Using './themis info status %s' to query transaction status.", txHash)
 	return nil
 }
 
@@ -83,7 +82,8 @@ var TxCommond = cli.Command{
 		TransferTxCommond,
 		ApproveTxCommond,
 		TransferFromTxCommond,
-		WithdrawONGTxCommond,
+		ApproveCandidateTxCommond,
+		UpdateConfigTxCommond,
 	},
 	Description: "Build transaction",
 }
@@ -140,20 +140,40 @@ var TransferFromTxCommond = cli.Command{
 	},
 }
 
-var WithdrawONGTxCommond = cli.Command{
-	Action:      withdrawONGTx,
-	Name:        "withdrawong",
-	Usage:       "Build Withdraw ONG transaction",
-	Description: "Build Withdraw ONG transaction",
-	ArgsUsage:   "<address|label|index>",
+var ApproveCandidateTxCommond = cli.Command{
+	Name:        "approvecand",
+	Usage:       "Build approve consensus,dns candidate transaction",
+	Description: "Build approve consensus,dns candidate transaction.",
+	Action:      approveCandidateTx,
 	Flags: []cli.Flag{
-		utils.RPCPortFlag,
 		utils.WalletFileFlag,
 		utils.TransactionGasPriceFlag,
 		utils.TransactionGasLimitFlag,
 		utils.TransactionPayerFlag,
-		utils.WithdrawONGAmountFlag,
-		utils.WithdrawONGReceiveAccountFlag,
+		utils.RejectCandidateFlag,
+		utils.ApproveCandidatePubkeyFlag,
+		utils.ApproveCandidateRoleFlag,
+	},
+}
+
+var UpdateConfigTxCommond = cli.Command{
+	Name:        "updateconfig",
+	Usage:       "Update consensus config in governance contract",
+	Description: "Update consensus config in governance contract.",
+	Action:      updateConfigTx,
+	Flags: []cli.Flag{
+		utils.WalletFileFlag,
+		utils.TransactionGasPriceFlag,
+		utils.TransactionGasLimitFlag,
+		utils.TransactionPayerFlag,
+		utils.ConfigNFlag,
+		utils.ConfigCFlag,
+		utils.ConfigKFlag,
+		utils.ConfigLFlag,
+		utils.ConfigBlockMsgDelayFlag,
+		utils.ConfigHashMsgDelayFlag,
+		utils.ConfigPeerHandshakeTimeoutFlag,
+		utils.ConfigMaxBlockChangeViewFlag,
 	},
 }
 
@@ -171,7 +191,7 @@ func transferTx(ctx *cli.Context) error {
 
 	asset := ctx.String(utils.GetFlagName(utils.TransactionAssetFlag))
 	if asset == "" {
-		asset = utils.ASSET_ONT
+		asset = utils.ASSET_USDT
 	}
 	from := ctx.String(utils.GetFlagName(utils.TransactionFromFlag))
 	fromAddr, err := cmdcom.ParseAddress(from, ctx)
@@ -203,12 +223,9 @@ func transferTx(ctx *cli.Context) error {
 	var amount uint64
 	amountStr := ctx.String(utils.TransactionAmountFlag.Name)
 	switch strings.ToLower(asset) {
-	case "ont":
-		amount = utils.ParseOnt(amountStr)
-		// amountStr = utils.FormatOnt(amount)
-	case "ong":
-		amount = utils.ParseOng(amountStr)
-		// amountStr = utils.FormatOng(amount)
+	case utils.ASSET_USDT:
+		amount = utils.ParseUsdt(amountStr)
+		amountStr = utils.FormatUsdt(amount)
 	default:
 		return fmt.Errorf("unsupport asset:%s", asset)
 	}
@@ -275,12 +292,9 @@ func approveTx(ctx *cli.Context) error {
 
 	var amount uint64
 	switch strings.ToLower(asset) {
-	case "ont":
-		amount = utils.ParseOnt(amountStr)
-		// amountStr = utils.FormatOnt(amount)
-	case "ong":
-		amount = utils.ParseOng(amountStr)
-		// amountStr = utils.FormatOng(amount)
+	case utils.ASSET_USDT:
+		amount = utils.ParseUsdt(amountStr)
+		amountStr = utils.FormatUsdt(amount)
 	default:
 		return fmt.Errorf("unsupport asset:%s", asset)
 	}
@@ -361,11 +375,9 @@ func transferFromTx(ctx *cli.Context) error {
 
 	var amount uint64
 	switch strings.ToLower(asset) {
-	case "ont":
-		amount = utils.ParseOnt(amountStr)
-	case "ong":
-		amount = utils.ParseOng(amountStr)
-		// amountStr = utils.FormatOng(amount)
+	case utils.ASSET_USDT:
+		amount = utils.ParseUsdt(amountStr)
+		amountStr = utils.FormatUsdt(amount)
 	default:
 		return fmt.Errorf("unsupport asset:%s", asset)
 	}
@@ -395,42 +407,17 @@ func transferFromTx(ctx *cli.Context) error {
 	return nil
 }
 
-func withdrawONGTx(ctx *cli.Context) error {
-	SetRpcPort(ctx)
-	if ctx.NArg() < 1 {
-		PrintErrorMsg("Missing account argument.")
+func approveCandidateTx(ctx *cli.Context) error {
+	var err error
+
+	peerPubkey := ctx.String(utils.GetFlagName(utils.ApproveCandidatePubkeyFlag))
+	payerAddr := ctx.String(utils.GetFlagName(utils.TransactionPayerFlag))
+
+	if peerPubkey == "" ||
+		payerAddr == "" {
+		PrintErrorMsg("Missing %s,%s argument.", utils.ApproveCandidatePubkeyFlag.Name, utils.TransactionPayerFlag.Name)
 		cli.ShowSubcommandHelp(ctx)
 		return nil
-	}
-	addrArg := ctx.Args().First()
-	accAddr, err := cmdcom.ParseAddress(addrArg, ctx)
-	if err != nil {
-		return err
-	}
-
-	fromAddr := nutils.OntContractAddress.ToBase58()
-
-	var amount uint64
-	amountStr := ctx.String(utils.GetFlagName(utils.TransferFromAmountFlag))
-	if amountStr == "" {
-		balance, err := utils.GetAllowance("ong", fromAddr, accAddr)
-		if err != nil {
-			return err
-		}
-		amount, err = strconv.ParseUint(balance, 10, 64)
-		if err != nil {
-			return err
-		}
-		if amount <= 0 {
-			return fmt.Errorf("haven't unbound ong")
-		}
-		// amountStr = utils.FormatOng(amount)
-	} else {
-		amount = utils.ParseOng(amountStr)
-		if amount <= 0 {
-			return fmt.Errorf("haven't unbound ong")
-		}
-		// amountStr = utils.FormatOng(amount)
 	}
 
 	var payer common.Address
@@ -448,27 +435,78 @@ func withdrawONGTx(ctx *cli.Context) error {
 		return fmt.Errorf("invalid payer address:%s", err)
 	}
 
-	var receiveAddr string
-	receive := ctx.String(utils.GetFlagName(utils.WithdrawONGReceiveAccountFlag))
-	if receive == "" {
-		receiveAddr = accAddr
+	gasPrice := ctx.Uint64(utils.TransactionGasPriceFlag.Name)
+	gasLimit := ctx.Uint64(utils.TransactionGasLimitFlag.Name)
+	role := ctx.String(utils.GetFlagName(utils.ApproveCandidateRoleFlag))
+	reject := ctx.Bool(utils.GetFlagName(utils.RejectCandidateFlag))
+
+	mutTx, err := utils.ApproveCandidateTx(gasPrice, gasLimit, reject, peerPubkey, role)
+	if err != nil {
+		return err
+	}
+
+	mutTx.Payer = payer
+
+	tx, err := mutTx.IntoImmutable()
+	if err != nil {
+		return fmt.Errorf("IntoImmutable error:%s", err)
+	}
+	sink := common.ZeroCopySink{}
+	err = tx.Serialization(&sink)
+	if err != nil {
+		return fmt.Errorf("tx serialization error:%s", err)
+	}
+	if reject {
+		PrintInfoMsg("Reject %s candidate raw tx:", role)
 	} else {
-		receiveAddr, err = cmdcom.ParseAddress(receive, ctx)
+		PrintInfoMsg("Approve %s candidate raw tx:", role)
+	}
+	PrintInfoMsg(hex.EncodeToString(sink.Bytes()))
+	return nil
+}
+
+func updateConfigTx(ctx *cli.Context) error {
+	var err error
+
+	payerAddr := ctx.String(utils.GetFlagName(utils.TransactionPayerFlag))
+
+	if payerAddr == "" {
+		PrintErrorMsg("Missing %s argument.", utils.TransactionPayerFlag.Name)
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+
+	if payerAddr != "" {
+		payerAddr, err = cmdcom.ParseAddress(payerAddr, ctx)
 		if err != nil {
 			return err
 		}
+	}
+	payer, err := common.AddressFromBase58(payerAddr)
+	if err != nil {
+		return fmt.Errorf("invalid payer address:%s", err)
 	}
 
 	gasPrice := ctx.Uint64(utils.TransactionGasPriceFlag.Name)
 	gasLimit := ctx.Uint64(utils.TransactionGasLimitFlag.Name)
 
-	PrintInfoMsg("Withdraw account:%s", accAddr)
-	PrintInfoMsg("Receive account:%s", receiveAddr)
-	PrintInfoMsg("Withdraw ONG amount:%v", amount)
-	mutTx, err := utils.TransferFromTx(gasPrice, gasLimit, "ong", accAddr, fromAddr, receiveAddr, amount)
-	if err != nil {
-		return err
+	configure := &gov.Configuration{N: uint32(ctx.Uint64(utils.ConfigNFlag.Name)),
+		C:                    uint32(ctx.Uint64(utils.ConfigCFlag.Name)),
+		K:                    uint32(ctx.Uint64(utils.ConfigKFlag.Name)),
+		L:                    uint32(ctx.Uint64(utils.ConfigLFlag.Name)),
+		BlockMsgDelay:        uint32(ctx.Uint64(utils.ConfigBlockMsgDelayFlag.Name)),
+		HashMsgDelay:         uint32(ctx.Uint64(utils.ConfigHashMsgDelayFlag.Name)),
+		PeerHandshakeTimeout: uint32(ctx.Uint64(utils.ConfigPeerHandshakeTimeoutFlag.Name)),
+		MaxBlockChangeView:   uint32(ctx.Uint64(utils.ConfigMaxBlockChangeViewFlag.Name)),
 	}
+
+	invokeCode, err := cutils.BuildNativeInvokeCode(nutils.GovernanceContractAddress,
+		utils.VERSION_TRANSACTION, gov.UPDATE_CONFIG, []interface{}{configure})
+
+	if err != nil {
+		return fmt.Errorf("build invoke code error:%s", err)
+	}
+	mutTx := utils.NewInvokeTransaction(gasPrice, gasLimit, invokeCode)
 
 	mutTx.Payer = payer
 	tx, err := mutTx.IntoImmutable()
@@ -477,7 +515,8 @@ func withdrawONGTx(ctx *cli.Context) error {
 	}
 	sink := common.ZeroCopySink{}
 	tx.Serialization(&sink)
-	PrintInfoMsg("Withdraw raw tx:")
+
+	PrintInfoMsg("Update config raw tx:")
 	PrintInfoMsg(hex.EncodeToString(sink.Bytes()))
 	return nil
 }

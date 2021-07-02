@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 // Package restful privides restful server router and handler
@@ -31,11 +31,11 @@ import (
 	"sync"
 	"time"
 
-	cfg "github.com/ontio/ontology/common/config"
-	"github.com/ontio/ontology/common/log"
-	"github.com/ontio/ontology/http/base/common"
-	berr "github.com/ontio/ontology/http/base/error"
-	"github.com/ontio/ontology/http/base/rest"
+	cfg "github.com/saveio/themis/common/config"
+	"github.com/saveio/themis/common/log"
+	"github.com/saveio/themis/http/base/common"
+	berr "github.com/saveio/themis/http/base/error"
+	"github.com/saveio/themis/http/base/rest"
 	"golang.org/x/net/netutil"
 )
 
@@ -54,33 +54,36 @@ type restServer struct {
 }
 
 const (
-	GET_ALL_API           = "/api/v1"
-	GET_CONN_COUNT        = "/api/v1/node/connectioncount"
-	GET_SYNC_STATUS       = "/api/v1/node/syncstatus"
-	GET_BLK_TXS_BY_HEIGHT = "/api/v1/block/transactions/height/:height"
-	GET_BLK_BY_HEIGHT     = "/api/v1/block/details/height/:height"
-	GET_BLK_BY_HASH       = "/api/v1/block/details/hash/:hash"
-	GET_BLK_HEIGHT        = "/api/v1/block/height"
-	GET_BLK_HASH          = "/api/v1/block/hash/:height"
-	GET_TX                = "/api/v1/transaction/:hash"
-	GET_STORAGE           = "/api/v1/storage/:hash/:key"
-	GET_BALANCE           = "/api/v1/balance/:addr"
-	GET_CONTRACT_STATE    = "/api/v1/contract/:hash"
-	GET_SMTCOCE_EVT_TXS   = "/api/v1/smartcode/event/transactions/:height"
-	GET_SMTCOCE_EVTS      = "/api/v1/smartcode/event/txhash/:hash"
-	GET_BLK_HGT_BY_TXHASH = "/api/v1/block/height/txhash/:hash"
-	GET_MERKLE_PROOF      = "/api/v1/merkleproof/:hash"
-	GET_GAS_PRICE         = "/api/v1/gasprice"
-	GET_ALLOWANCE         = "/api/v1/allowance/:asset/:from/:to"
-	GET_UNBOUNDONG        = "/api/v1/unboundong/:addr"
-	GET_GRANTONG          = "/api/v1/grantong/:addr"
-	GET_MEMPOOL_TXCOUNT   = "/api/v1/mempool/txcount"
-	GET_MEMPOOL_TXSTATE   = "/api/v1/mempool/txstate/:hash"
-	GET_MEMPOOL_TXHASHS   = "/api/v1/mempool/txhashlist"
-	GET_VERSION           = "/api/v1/version"
-	GET_NETWORKID         = "/api/v1/networkid"
-
-	POST_RAW_TX = "/api/v1/transaction"
+	GET_ALL_API                = "/api/v1"
+	GET_CONN_COUNT             = "/api/v1/node/connectioncount"
+	GET_SYNC_STATUS            = "/api/v1/node/syncstatus"
+	GET_BLK_TXS_BY_HEIGHT      = "/api/v1/block/transactions/height/:height"
+	GET_BLK_BY_HEIGHT          = "/api/v1/block/details/height/:height"
+	GET_BLK_BY_HASH            = "/api/v1/block/details/hash/:hash"
+	GET_BLK_HEIGHT             = "/api/v1/block/height"
+	GET_BLK_HASH               = "/api/v1/block/hash/:height"
+	GET_TX                     = "/api/v1/transaction/:hash"
+	GET_STORAGE                = "/api/v1/storage/:hash/:key"
+	GET_BALANCE                = "/api/v1/balance/:addr"
+	GET_CONTRACT_STATE         = "/api/v1/contract/:hash"
+	GET_SMTCOCE_EVT_TXS        = "/api/v1/smartcode/event/transactions/:height"
+	GET_SMTCOCE_EVTS           = "/api/v1/smartcode/event/txhash/:hash"
+	GET_BLK_HGT_BY_TXHASH      = "/api/v1/block/height/txhash/:hash"
+	GET_MERKLE_PROOF           = "/api/v1/merkleproof/:hash"
+	GET_GAS_PRICE              = "/api/v1/gasprice"
+	GET_ALLOWANCE              = "/api/v1/allowance/:asset/:from/:to"
+	GET_UNBOUNDONG             = "/api/v1/unboundong/:addr"
+	GET_GRANTONG               = "/api/v1/grantong/:addr"
+	GET_MEMPOOL_TXCOUNT        = "/api/v1/mempool/txcount"
+	GET_MEMPOOL_TXSTATE        = "/api/v1/mempool/txstate/:hash"
+	GET_MEMPOOL_TXHASHS        = "/api/v1/mempool/txhashlist"
+	GET_VERSION                = "/api/v1/version"
+	GET_NETWORKID              = "/api/v1/networkid"
+	GET_SYS_STATUS_SCORE       = "/api/v1/getsysstatusscore"
+	GET_SMTCOCE_EVT_ID         = "/api/v1/smartcode/event/eventid/:contract/:addr/:id"
+	GET_SMTCOCE_EVT_ID_HEIGHTS = "/api/v1/smartcode/event/heights/:contract/:id/:start/:end/:addr"
+	GET_SMTCOCE_EVT_ADDR       = "/api/v1/smartcode/event/height/address/:height/:addr"
+	POST_RAW_TX                = "/api/v1/transaction"
 )
 
 //init restful server
@@ -150,30 +153,32 @@ func (this *restServer) registryMethod() {
 				"Version": "1.0.0",
 			}
 		}},
-		GET_CONN_COUNT:        {name: "getconnectioncount", handler: rest.GetConnectionCount},
-		GET_SYNC_STATUS:       {name: "getsyncstatus", handler: rest.GetNodeSyncStatus},
-		GET_BLK_TXS_BY_HEIGHT: {name: "getblocktxsbyheight", handler: rest.GetBlockTxsByHeight},
-		GET_BLK_BY_HEIGHT:     {name: "getblockbyheight", handler: rest.GetBlockByHeight},
-		GET_BLK_BY_HASH:       {name: "getblockbyhash", handler: rest.GetBlockByHash},
-		GET_BLK_HEIGHT:        {name: "getblockheight", handler: rest.GetBlockHeight},
-		GET_BLK_HASH:          {name: "getblockhash", handler: rest.GetBlockHash},
-		GET_TX:                {name: "gettransaction", handler: rest.GetTransactionByHash},
-		GET_CONTRACT_STATE:    {name: "getcontract", handler: rest.GetContractState},
-		GET_SMTCOCE_EVT_TXS:   {name: "getsmartcodeeventbyheight", handler: rest.GetSmartCodeEventTxsByHeight},
-		GET_SMTCOCE_EVTS:      {name: "getsmartcodeeventbyhash", handler: rest.GetSmartCodeEventByTxHash},
-		GET_BLK_HGT_BY_TXHASH: {name: "getblockheightbytxhash", handler: rest.GetBlockHeightByTxHash},
-		GET_STORAGE:           {name: "getstorage", handler: rest.GetStorage},
-		GET_BALANCE:           {name: "getbalance", handler: rest.GetBalance},
-		GET_ALLOWANCE:         {name: "getallowance", handler: rest.GetAllowance},
-		GET_MERKLE_PROOF:      {name: "getmerkleproof", handler: rest.GetMerkleProof},
-		GET_GAS_PRICE:         {name: "getgasprice", handler: rest.GetGasPrice},
-		GET_UNBOUNDONG:        {name: "getunboundong", handler: rest.GetUnboundOng},
-		GET_GRANTONG:          {name: "getgrantong", handler: rest.GetGrantOng},
-		GET_MEMPOOL_TXCOUNT:   {name: "getmempooltxcount", handler: rest.GetMemPoolTxCount},
-		GET_MEMPOOL_TXSTATE:   {name: "getmempooltxstate", handler: rest.GetMemPoolTxState},
-		GET_MEMPOOL_TXHASHS:   {name: "getmempooltxhashlist", handler: rest.GetMemPoolTxHashList},
-		GET_VERSION:           {name: "getversion", handler: rest.GetNodeVersion},
-		GET_NETWORKID:         {name: "getnetworkid", handler: rest.GetNetworkId},
+		GET_CONN_COUNT:             {name: "getconnectioncount", handler: rest.GetConnectionCount},
+		GET_SYNC_STATUS:            {name: "getsyncstatus", handler: rest.GetNodeSyncStatus},
+		GET_BLK_TXS_BY_HEIGHT:      {name: "getblocktxsbyheight", handler: rest.GetBlockTxsByHeight},
+		GET_BLK_BY_HEIGHT:          {name: "getblockbyheight", handler: rest.GetBlockByHeight},
+		GET_BLK_BY_HASH:            {name: "getblockbyhash", handler: rest.GetBlockByHash},
+		GET_BLK_HEIGHT:             {name: "getblockheight", handler: rest.GetBlockHeight},
+		GET_BLK_HASH:               {name: "getblockhash", handler: rest.GetBlockHash},
+		GET_TX:                     {name: "gettransaction", handler: rest.GetTransactionByHash},
+		GET_CONTRACT_STATE:         {name: "getcontract", handler: rest.GetContractState},
+		GET_SMTCOCE_EVT_TXS:        {name: "getsmartcodeeventbyheight", handler: rest.GetSmartCodeEventTxsByHeight},
+		GET_SMTCOCE_EVTS:           {name: "getsmartcodeeventbyhash", handler: rest.GetSmartCodeEventByTxHash},
+		GET_BLK_HGT_BY_TXHASH:      {name: "getblockheightbytxhash", handler: rest.GetBlockHeightByTxHash},
+		GET_STORAGE:                {name: "getstorage", handler: rest.GetStorage},
+		GET_BALANCE:                {name: "getbalance", handler: rest.GetBalance},
+		GET_ALLOWANCE:              {name: "getallowance", handler: rest.GetAllowance},
+		GET_MERKLE_PROOF:           {name: "getmerkleproof", handler: rest.GetMerkleProof},
+		GET_GAS_PRICE:              {name: "getgasprice", handler: rest.GetGasPrice},
+		GET_MEMPOOL_TXCOUNT:        {name: "getmempooltxcount", handler: rest.GetMemPoolTxCount},
+		GET_MEMPOOL_TXSTATE:        {name: "getmempooltxstate", handler: rest.GetMemPoolTxState},
+		GET_MEMPOOL_TXHASHS:        {name: "getmempooltxhashlist", handler: rest.GetMemPoolTxHashList},
+		GET_VERSION:                {name: "getversion", handler: rest.GetNodeVersion},
+		GET_NETWORKID:              {name: "getnetworkid", handler: rest.GetNetworkId},
+		GET_SYS_STATUS_SCORE:       {name: "getsysstatusscore", handler: rest.GetSysStatusScore},
+		GET_SMTCOCE_EVT_ADDR:       {name: "getsmartcodeeventbyheightaddr", handler: rest.GetSmartCodeEventByHeightAndAddress},
+		GET_SMTCOCE_EVT_ID:         {name: "getsmartcodeeventbyeventid", handler: rest.GetSmartCodeEventByEventId},
+		GET_SMTCOCE_EVT_ID_HEIGHTS: {name: "getsmartcodeeventbyeventidandheights", handler: rest.GetSmartCodeEventByEventIdAndHeights},
 	}
 
 	postMethodMap := map[string]Action{
@@ -217,6 +222,14 @@ func (this *restServer) getPath(url string) string {
 		return GET_GRANTONG
 	} else if strings.Contains(url, strings.TrimRight(GET_MEMPOOL_TXSTATE, ":hash")) {
 		return GET_MEMPOOL_TXSTATE
+	} else if strings.Contains(url, strings.TrimRight(GET_SMTCOCE_EVT_ADDR, ":height/:addr")) {
+		return GET_SMTCOCE_EVT_ADDR
+	} else if strings.Contains(url, strings.TrimRight(GET_SMTCOCE_EVTS, ":hash")) {
+		return GET_SMTCOCE_EVTS
+	} else if strings.Contains(url, strings.TrimRight(GET_SMTCOCE_EVT_ID, ":contract/:addr/:id")) {
+		return GET_SMTCOCE_EVT_ID
+	} else if strings.Contains(url, strings.TrimRight(GET_SMTCOCE_EVT_ID_HEIGHTS, ":contract/:id/:start/:end/:addr")) {
+		return GET_SMTCOCE_EVT_ID_HEIGHTS
 	}
 	return url
 }
@@ -261,6 +274,18 @@ func (this *restServer) getParams(r *http.Request, url string, req map[string]in
 		req["Addr"] = getParam(r, "addr")
 	case GET_MEMPOOL_TXSTATE:
 		req["Hash"] = getParam(r, "hash")
+	case GET_SMTCOCE_EVT_ADDR:
+		req["Height"], req["Addr"] = getParam(r, "height"), getParam(r, "addr")
+	case GET_SMTCOCE_EVT_ID:
+		req["ContractAddr"] = getParam(r, "contract")
+		req["Addr"] = getParam(r, "addr")
+		req["EventId"] = getParam(r, "id")
+	case GET_SMTCOCE_EVT_ID_HEIGHTS:
+		req["ContractAddr"] = getParam(r, "contract")
+		req["EventId"] = getParam(r, "id")
+		req["StartHeight"] = getParam(r, "start")
+		req["EndHeight"] = getParam(r, "end")
+		req["Addr"] = getParam(r, "addr")
 	default:
 	}
 	return req

@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 package neovm
 
@@ -21,12 +21,12 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/ontio/ontology/common"
-	"github.com/ontio/ontology/core/payload"
-	"github.com/ontio/ontology/core/types"
-	"github.com/ontio/ontology/core/utils"
-	"github.com/ontio/ontology/vm/crossvm_codec"
-	vm "github.com/ontio/ontology/vm/neovm"
+	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/core/payload"
+	"github.com/saveio/themis/core/types"
+	"github.com/saveio/themis/core/utils"
+	"github.com/saveio/themis/vm/crossvm_codec"
+	vm "github.com/saveio/themis/vm/neovm"
 )
 
 //neovm contract call wasmvm contract

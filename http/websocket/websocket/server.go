@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 // Package websocket privides websocket server handler
@@ -30,12 +30,12 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/ontio/ontology/common"
-	cfg "github.com/ontio/ontology/common/config"
-	"github.com/ontio/ontology/common/log"
-	Err "github.com/ontio/ontology/http/base/error"
-	"github.com/ontio/ontology/http/base/rest"
-	"github.com/ontio/ontology/http/websocket/session"
+	"github.com/saveio/themis/common"
+	cfg "github.com/saveio/themis/common/config"
+	"github.com/saveio/themis/common/log"
+	Err "github.com/saveio/themis/http/base/error"
+	"github.com/saveio/themis/http/base/rest"
+	"github.com/saveio/themis/http/websocket/session"
 )
 
 const (
@@ -178,32 +178,34 @@ func (self *WsServer) registryMethod() {
 		return resp
 	}
 	actionMap := map[string]Handler{
-		"getblockheightbytxhash":    {handler: rest.GetBlockHeightByTxHash},
-		"getsmartcodeeventbyhash":   {handler: rest.GetSmartCodeEventByTxHash},
-		"getsmartcodeeventbyheight": {handler: rest.GetSmartCodeEventTxsByHeight},
-		"getcontract":               {handler: rest.GetContractState},
-		"getbalance":                {handler: rest.GetBalance},
-		"getconnectioncount":        {handler: rest.GetConnectionCount},
-		"getblockbyheight":          {handler: rest.GetBlockByHeight},
-		"getblockhash":              {handler: rest.GetBlockHash},
-		"getblockbyhash":            {handler: rest.GetBlockByHash},
-		"getblockheight":            {handler: rest.GetBlockHeight},
-		"gettransaction":            {handler: rest.GetTransactionByHash},
-		"sendrawtransaction":        {handler: rest.SendRawTransaction, pushFlag: true},
-		"heartbeat":                 {handler: heartbeat},
-		"subscribe":                 {handler: subscribe},
-		"getstorage":                {handler: rest.GetStorage},
-		"getallowance":              {handler: rest.GetAllowance},
-		"getmerkleproof":            {handler: rest.GetMerkleProof},
-		"getblocktxsbyheight":       {handler: rest.GetBlockTxsByHeight},
-		"getgasprice":               {handler: rest.GetGasPrice},
-		"getunboundong":             {handler: rest.GetUnboundOng},
-		"getgrantong":               {handler: rest.GetGrantOng},
-		"getmempooltxcount":         {handler: rest.GetMemPoolTxCount},
-		"getmempooltxstate":         {handler: rest.GetMemPoolTxState},
-		"getmempooltxhashlist":      {handler: rest.GetMemPoolTxHashList},
-		"getversion":                {handler: rest.GetNodeVersion},
-		"getnetworkid":              {handler: rest.GetNetworkId},
+		"getblockheightbytxhash":               {handler: rest.GetBlockHeightByTxHash},
+		"getsmartcodeeventbyhash":              {handler: rest.GetSmartCodeEventByTxHash},
+		"getsmartcodeeventbyheight":            {handler: rest.GetSmartCodeEventTxsByHeight},
+		"getcontract":                          {handler: rest.GetContractState},
+		"getbalance":                           {handler: rest.GetBalance},
+		"getconnectioncount":                   {handler: rest.GetConnectionCount},
+		"getblockbyheight":                     {handler: rest.GetBlockByHeight},
+		"getblockhash":                         {handler: rest.GetBlockHash},
+		"getblockbyhash":                       {handler: rest.GetBlockByHash},
+		"getblockheight":                       {handler: rest.GetBlockHeight},
+		"gettransaction":                       {handler: rest.GetTransactionByHash},
+		"sendrawtransaction":                   {handler: rest.SendRawTransaction, pushFlag: true},
+		"heartbeat":                            {handler: heartbeat},
+		"subscribe":                            {handler: subscribe},
+		"getstorage":                           {handler: rest.GetStorage},
+		"getallowance":                         {handler: rest.GetAllowance},
+		"getmerkleproof":                       {handler: rest.GetMerkleProof},
+		"getblocktxsbyheight":                  {handler: rest.GetBlockTxsByHeight},
+		"getgasprice":                          {handler: rest.GetGasPrice},
+		"getmempooltxcount":                    {handler: rest.GetMemPoolTxCount},
+		"getmempooltxstate":                    {handler: rest.GetMemPoolTxState},
+		"getmempooltxhashlist":                 {handler: rest.GetMemPoolTxHashList},
+		"getversion":                           {handler: rest.GetNodeVersion},
+		"getnetworkid":                         {handler: rest.GetNetworkId},
+		"getsysstatusscore":                    {handler: rest.GetSysStatusScore},
+		"getsmartcodeeventbyheightaddr":        {handler: rest.GetSmartCodeEventByHeightAndAddress},
+		"getsmartcodeeventbyeventid":           {handler: rest.GetSmartCodeEventByEventId},
+		"getsmartcodeeventbyeventidandheights": {handler: rest.GetSmartCodeEventByEventIdAndHeights},
 
 		"getsessioncount": {handler: getsessioncount},
 	}

@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 package test
@@ -22,14 +22,14 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/ontio/ontology-crypto/keypair"
-	"github.com/ontio/ontology/account"
-	"github.com/ontio/ontology/common"
-	"github.com/ontio/ontology/core/signature"
-	"github.com/ontio/ontology/core/types"
-	"github.com/ontio/ontology/smartcontract"
-	svm "github.com/ontio/ontology/smartcontract/service/neovm"
-	vtypes "github.com/ontio/ontology/vm/neovm/types"
+	"github.com/saveio/themis/crypto/keypair"
+	"github.com/saveio/themis/account"
+	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/core/signature"
+	"github.com/saveio/themis/core/types"
+	"github.com/saveio/themis/smartcontract"
+	svm "github.com/saveio/themis/smartcontract/service/neovm"
+	vtypes "github.com/saveio/themis/vm/neovm/types"
 )
 
 func TestVerifySig(t *testing.T) {

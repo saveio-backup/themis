@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 package utils
@@ -21,9 +21,9 @@ package utils
 import (
 	"strings"
 
-	"github.com/ontio/ontology/common/config"
-	"github.com/ontio/ontology/common/log"
-	"github.com/ontio/ontology/smartcontract/service/neovm"
+	"github.com/saveio/themis/common/config"
+	"github.com/saveio/themis/common/log"
+	"github.com/saveio/themis/smartcontract/service/neovm"
 	"github.com/urfave/cli"
 )
 
@@ -125,7 +125,7 @@ var (
 	}
 	NetworkIdFlag = cli.UintFlag{
 		Name:  "networkid",
-		Usage: "Network id `<number>`. 1=ontology main net, 2=polaris test net, 3=testmode, and other for custom network",
+		Usage: "Network id `<number>`. 1=themis main net, 2=polaris test net, 3=testmode, and other for custom network",
 		Value: config.NETWORK_ID_MAIN_NET,
 	}
 	NodePortFlag = cli.UintFlag{
@@ -133,10 +133,14 @@ var (
 		Usage: "P2P network port `<number>`",
 		Value: config.DEFAULT_NODE_PORT,
 	}
-	HttpInfoPortFlag = cli.UintFlag{
-		Name:  "httpinfo-port",
-		Usage: "The listening port of http server for viewing node information `<number>`",
-		Value: config.DEFAULT_HTTP_INFO_PORT,
+	DualPortSupportFlag = cli.BoolFlag{
+		Name:  "dual-port",
+		Usage: "Enable a dual network, P2P network for transaction messages and for consensus messages.",
+	}
+	ConsensusPortFlag = cli.UintFlag{
+		Name:  "consensus-port",
+		Usage: "Consensus network port `<number>`. Effectively after set --dual-port parameter",
+		Value: config.DEFAULT_CONSENSUS_PORT,
 	}
 	MaxConnInBoundFlag = cli.UintFlag{
 		Name:  "max-conn-in-bound",
@@ -298,10 +302,9 @@ var (
 		Name:  "address",
 		Usage: "Contract `<address>`",
 	}
-	ContractVmTypeFlag = cli.UintFlag{
-		Name:  "vmtype",
-		Usage: "The Contract type: 1 for Neovm ,3 for Wasmvm",
-		Value: 1,
+	ContractStorageFlag = cli.BoolFlag{
+		Name:  "needstore",
+		Usage: "Is need use storage in contract",
 	}
 	ContractCodeFileFlag = cli.StringFlag{
 		Name:  "code",
@@ -360,8 +363,8 @@ var (
 	//Transfer setting
 	TransactionAssetFlag = cli.StringFlag{
 		Name:  "asset",
-		Usage: "Asset of ONT or ONG",
-		Value: ASSET_ONT,
+		Usage: "Asset of USDT",
+		Value: ASSET_USDT,
 	}
 	TransactionFromFlag = cli.StringFlag{
 		Name:  "from",
@@ -405,8 +408,8 @@ var (
 	}
 	ApproveAssetFlag = cli.StringFlag{
 		Name:  "asset",
-		Usage: "Asset of ONT of ONG to approve",
-		Value: "ont",
+		Usage: "Asset of usdt to approve",
+		Value: "usdt",
 	}
 	ApproveAmountFlag = cli.StringFlag{
 		Name:  "amount",
@@ -513,6 +516,63 @@ var (
 	NonOptionFlag = cli.StringFlag{
 		Name:  "option",
 		Usage: "this command does not need option, please run directly",
+	}
+
+	//Governance switcher
+	//approve/reject consensus/dns candiate
+	RejectCandidateFlag = cli.BoolFlag{
+		Name:  "reject",
+		Usage: "Reject candidate",
+	}
+	ApproveCandidatePubkeyFlag = cli.StringFlag{
+		Name:  "pubkey",
+		Usage: "Pubkey of candidate to approve",
+	}
+	ApproveCandidateRoleFlag = cli.StringFlag{
+		Name:  "role",
+		Usage: "Role of candidate to approve. Consensus or dns",
+		Value: "consensus",
+	}
+	//update governance Config
+	ConfigNFlag = cli.UintFlag{
+		Name:  "n",
+		Usage: "Number of concensus node",
+		Value: 7,
+	}
+	ConfigCFlag = cli.UintFlag{
+		Name:  "c",
+		Usage: "Number of failure to tolerate",
+		Value: 2,
+	}
+	ConfigKFlag = cli.UintFlag{
+		Name:  "k",
+		Usage: "Number of node take part in consensus",
+		Value: 7,
+	}
+	ConfigLFlag = cli.UintFlag{
+		Name:  "l",
+		Usage: "Amplify scale",
+		Value: 16,
+	}
+	ConfigBlockMsgDelayFlag = cli.UintFlag{
+		Name:  "duration",
+		Usage: "Consensus interval",
+		Value: 1000,
+	}
+	ConfigHashMsgDelayFlag = cli.UintFlag{
+		Name:  "timeout",
+		Usage: "Endorse and commit timeout",
+		Value: 500,
+	}
+	ConfigPeerHandshakeTimeoutFlag = cli.UintFlag{
+		Name:  "heartbeat",
+		Usage: "Heartbeat interval",
+		Value: 1000,
+	}
+	ConfigMaxBlockChangeViewFlag = cli.UintFlag{
+		Name:  "blockchange",
+		Usage: "Number of block to change view",
+		Value: 12000,
 	}
 )
 

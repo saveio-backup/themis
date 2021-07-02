@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 package main
@@ -30,43 +30,43 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/fdlimit"
-	"github.com/ontio/ontology-crypto/keypair"
-	alog "github.com/ontio/ontology-eventbus/log"
-	"github.com/ontio/ontology/account"
-	"github.com/ontio/ontology/cmd"
-	cmdcom "github.com/ontio/ontology/cmd/common"
-	"github.com/ontio/ontology/cmd/utils"
-	"github.com/ontio/ontology/common"
-	"github.com/ontio/ontology/common/config"
-	"github.com/ontio/ontology/common/log"
-	"github.com/ontio/ontology/consensus"
-	"github.com/ontio/ontology/core/genesis"
-	"github.com/ontio/ontology/core/ledger"
-	"github.com/ontio/ontology/events"
-	bactor "github.com/ontio/ontology/http/base/actor"
-	"github.com/ontio/ontology/http/graphql"
-	"github.com/ontio/ontology/http/jsonrpc"
-	"github.com/ontio/ontology/http/localrpc"
-	"github.com/ontio/ontology/http/nodeinfo"
-	"github.com/ontio/ontology/http/restful"
-	"github.com/ontio/ontology/http/websocket"
-	"github.com/ontio/ontology/p2pserver"
-	netreqactor "github.com/ontio/ontology/p2pserver/actor/req"
-	p2p "github.com/ontio/ontology/p2pserver/net/protocol"
-	"github.com/ontio/ontology/txnpool"
-	tc "github.com/ontio/ontology/txnpool/common"
-	"github.com/ontio/ontology/txnpool/proc"
-	"github.com/ontio/ontology/validator/stateful"
-	"github.com/ontio/ontology/validator/stateless"
+	alog "github.com/ontio/themis-eventbus/log"
+	"github.com/saveio/themis/account"
+	"github.com/saveio/themis/cmd"
+	cmdcom "github.com/saveio/themis/cmd/common"
+	"github.com/saveio/themis/cmd/utils"
+	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/common/config"
+	"github.com/saveio/themis/common/log"
+	"github.com/saveio/themis/consensus"
+	"github.com/saveio/themis/core/genesis"
+	"github.com/saveio/themis/core/ledger"
+	"github.com/saveio/themis/crypto/keypair"
+	"github.com/saveio/themis/events"
+	bactor "github.com/saveio/themis/http/base/actor"
+	"github.com/saveio/themis/http/graphql"
+	"github.com/saveio/themis/http/jsonrpc"
+	"github.com/saveio/themis/http/localrpc"
+	"github.com/saveio/themis/http/nodeinfo"
+	"github.com/saveio/themis/http/restful"
+	"github.com/saveio/themis/http/websocket"
+	"github.com/saveio/themis/p2pserver"
+	netreqactor "github.com/saveio/themis/p2pserver/actor/req"
+	p2p "github.com/saveio/themis/p2pserver/net/protocol"
+	"github.com/saveio/themis/txnpool"
+	tc "github.com/saveio/themis/txnpool/common"
+	"github.com/saveio/themis/txnpool/proc"
+	"github.com/saveio/themis/validator/stateful"
+	"github.com/saveio/themis/validator/stateless"
 	"github.com/urfave/cli"
 )
 
 func setupAPP() *cli.App {
 	app := cli.NewApp()
-	app.Usage = "Ontology CLI"
-	app.Action = startOntology
+	app.Usage = "Themis CLI"
+	app.Action = startThemis
 	app.Version = config.Version
-	app.Copyright = "Copyright in 2018 The Ontology Authors"
+	app.Copyright = "Copyright in 2018 The Themis Authors"
 	app.Commands = []cli.Command{
 		cmd.AccountCommand,
 		cmd.InfoCommand,
@@ -146,10 +146,10 @@ func main() {
 	}
 }
 
-func startOntology(ctx *cli.Context) {
+func startThemis(ctx *cli.Context) {
 	initLog(ctx)
 
-	log.Infof("ontology version %s", config.Version)
+	log.Infof("themis version %s", config.Version)
 
 	setMaxOpenFiles()
 
@@ -218,9 +218,9 @@ func initLog(ctx *cli.Context) {
 	}
 }
 
-func initConfig(ctx *cli.Context) (*config.OntologyConfig, error) {
-	//init ontology config from cli
-	cfg, err := cmd.SetOntologyConfig(ctx)
+func initConfig(ctx *cli.Context) (*config.ThemisConfig, error) {
+	//init themis config from cli
+	cfg, err := cmd.SetThemisConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +462,7 @@ func waitToExit(db *ledger.Ledger) {
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
 		for sig := range sc {
-			log.Infof("Ontology received exit signal: %v.", sig.String())
+			log.Infof("Themis received exit signal: %v.", sig.String())
 			log.Infof("closing ledger...")
 			db.Close()
 			close(exit)

@@ -1,30 +1,30 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 package actor
 
 import (
-	"github.com/ontio/ontology/common"
-	"github.com/ontio/ontology/core/ledger"
-	"github.com/ontio/ontology/core/payload"
-	"github.com/ontio/ontology/core/types"
-	"github.com/ontio/ontology/smartcontract/event"
-	cstate "github.com/ontio/ontology/smartcontract/states"
+	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/core/ledger"
+	"github.com/saveio/themis/core/payload"
+	"github.com/saveio/themis/core/types"
+	"github.com/saveio/themis/smartcontract/event"
+	cstate "github.com/saveio/themis/smartcontract/states"
 )
 
 const (
@@ -114,4 +114,16 @@ func GetCrossChainMsg(height uint32) (*types.CrossChainMsg, error) {
 
 func GetCrossStatesProof(height uint32, key []byte) ([]byte, error) {
 	return ledger.DefLedger.GetCrossStatesProof(height, key)
+}
+
+func GetEventNotifyByEventId(contractAddress common.Address, address common.Address, eventId uint32) ([]*event.ExecuteNotify, error) {
+	return ledger.DefLedger.GetEventNotifyByEventId(contractAddress, address, eventId)
+}
+func GetEventNotifyByEventIdAndHeights(contractAddress common.Address, address []byte, eventId, startHeight, endHeight uint32) ([]*event.ExecuteNotify, error) {
+	return ledger.DefLedger.GetEventNotifyByEventIdAndHeight(contractAddress, address, eventId, startHeight, endHeight)
+}
+
+//GetMerkleProof from ledger
+func GetMerkleProof(proofHeight uint32, rootHeight uint32) ([]common.Uint256, error) {
+	return ledger.DefLedger.GetMerkleProof(proofHeight, rootHeight)
 }

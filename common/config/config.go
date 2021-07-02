@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 package config
@@ -26,11 +26,11 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/ontio/ontology-crypto/keypair"
-	"github.com/ontio/ontology/common"
-	"github.com/ontio/ontology/common/constants"
-	"github.com/ontio/ontology/common/log"
-	"github.com/ontio/ontology/errors"
+	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/common/constants"
+	"github.com/saveio/themis/common/log"
+	"github.com/saveio/themis/crypto/keypair"
+	"github.com/saveio/themis/errors"
 )
 
 var Version = "v2.0.0" //Set value when build project
@@ -57,19 +57,20 @@ const (
 	CONSENSUS_TYPE_VBFT = "vbft"
 
 	DEFAULT_LOG_LEVEL                       = log.InfoLog
-	DEFAULT_NODE_PORT                       = 20338
-	DEFAULT_RPC_PORT                        = 20336
-	DEFAULT_RPC_LOCAL_PORT                  = 20337
-	DEFAULT_GRAPHQL_PORT                    = 20333
-	DEFAULT_REST_PORT                       = 20334
-	DEFAULT_WS_PORT                         = 20335
-	DEFAULT_HTTP_MAX_CONN                   = 1024
-	DEFAULT_MAX_CONN_IN_BOUND               = 1024
-	DEFAULT_MAX_CONN_OUT_BOUND              = 1024
-	DEFAULT_MAX_CONN_IN_BOUND_FOR_SINGLE_IP = 16
-	DEFAULT_HTTP_INFO_PORT                  = 0
+	DEFAULT_MAX_LOG_SIZE                    = 100 //MByte
+	DEFAULT_NODE_PORT                       = uint(20338)
+	DEFAULT_CONSENSUS_PORT                  = uint(20339)
+	DEFAULT_RPC_PORT                        = uint(20336)
+	DEFAULT_RPC_LOCAL_PORT                  = uint(20337)
+	DEFAULT_REST_PORT                       = uint(20334)
+	DEFAULT_WS_PORT                         = uint(20335)
+	DEFAULT_MAX_CONN_IN_BOUND               = uint(1024)
+	DEFAULT_MAX_CONN_OUT_BOUND              = uint(1024)
+	DEFAULT_MAX_CONN_IN_BOUND_FOR_SINGLE_IP = uint(16)
+	DEFAULT_HTTP_INFO_PORT                  = uint(0)
 	DEFAULT_MAX_TX_IN_BLOCK                 = 60000
 	DEFAULT_MAX_SYNC_HEADER                 = 500
+	DEFAULT_ENABLE_CONSENSUS                = true
 	DEFAULT_ENABLE_EVENT_LOG                = true
 	DEFAULT_CLI_RPC_PORT                    = uint(20000)
 	DEFUALT_CLI_RPC_ADDRESS                 = "127.0.0.1"
@@ -90,7 +91,7 @@ const (
 	NETWORK_ID_MAIN_NET      = 1
 	NETWORK_ID_POLARIS_NET   = 2
 	NETWORK_ID_SOLO_NET      = 3
-	NETWORK_NAME_MAIN_NET    = "ontology"
+	NETWORK_NAME_MAIN_NET    = "themis"
 	NETWORK_NAME_POLARIS_NET = "polaris"
 	NETWORK_NAME_SOLO_NET    = "testmode"
 )
@@ -336,12 +337,12 @@ var MainNetConfig = &GenesisConfig{
 		C:                    2,
 		K:                    7,
 		L:                    112,
-		BlockMsgDelay:        10000,
-		HashMsgDelay:         10000,
+		BlockMsgDelay:        5000,
+		HashMsgDelay:         500,
 		PeerHandshakeTimeout: 10,
 		MaxBlockChangeView:   120000,
 		AdminOntID:           "did:ont:AdjfcJgwru2FD8kotCPvLDXYzRjqFjc9Tb",
-		MinInitStake:         100000,
+		MinInitStake:         10000000000000,
 		VrfValue:             "1c9810aa9822e511d5804a9c4db9dd08497c31087b0daafa34d768a3253441fa20515e2f30f81741102af0ca3cefc4818fef16adb825fbaa8cad78647f3afb590e",
 		VrfProof:             "c57741f934042cb8d8b087b44b161db56fc3ffd4ffb675d36cd09f83935be853d8729f3f5298d12d6fd28d45dde515a4b9d7f67682d182ba5118abf451ff1988",
 		Peers: []*VBFTPeerStakeInfo{
@@ -418,7 +419,7 @@ type VBFTConfig struct {
 	HashMsgDelay         uint32               `json:"hash_msg_delay"`
 	PeerHandshakeTimeout uint32               `json:"peer_handshake_timeout"`
 	MaxBlockChangeView   uint32               `json:"max_block_change_view"`
-	MinInitStake         uint32               `json:"min_init_stake"`
+	MinInitStake         uint64               `json:"min_init_stake"`
 	AdminOntID           string               `json:"admin_ont_id"`
 	VrfValue             string               `json:"vrf_value"`
 	VrfProof             string               `json:"vrf_proof"`
@@ -623,7 +624,9 @@ type P2PNodeConfig struct {
 	NetworkMagic              uint32
 	NetworkId                 uint32
 	NetworkName               string
-	NodePort                  uint16
+	NodePort                  uint
+	NodeConsensusPort         uint
+	DualPortSupport           bool
 	IsTLS                     bool
 	CertPath                  string
 	KeyPath                   string
@@ -695,6 +698,8 @@ func NewOntologyConfig() *OntologyConfig {
 			NetworkName:               GetNetworkName(NETWORK_ID_MAIN_NET),
 			NetworkMagic:              GetNetworkMagic(NETWORK_ID_MAIN_NET),
 			NodePort:                  DEFAULT_NODE_PORT,
+			NodeConsensusPort:         DEFAULT_CONSENSUS_PORT,
+			DualPortSupport:           true,
 			IsTLS:                     false,
 			CertPath:                  "",
 			KeyPath:                   "",

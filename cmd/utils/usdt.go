@@ -1,60 +1,70 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 package utils
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math/rand"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/ontio/ontology-crypto/keypair"
-	sig "github.com/ontio/ontology-crypto/signature"
-	"github.com/ontio/ontology/account"
-	"github.com/ontio/ontology/common"
-	"github.com/ontio/ontology/common/constants"
-	"github.com/ontio/ontology/common/serialization"
-	"github.com/ontio/ontology/core/payload"
-	"github.com/ontio/ontology/core/signature"
-	"github.com/ontio/ontology/core/types"
-	cutils "github.com/ontio/ontology/core/utils"
-	httpcom "github.com/ontio/ontology/http/base/common"
-	"github.com/ontio/ontology/smartcontract/service/native/ont"
-	"github.com/ontio/ontology/smartcontract/service/native/utils"
+	"github.com/saveio/themis/account"
+	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/common/constants"
+	"github.com/saveio/themis/common/serialization"
+	"github.com/saveio/themis/core/payload"
+	"github.com/saveio/themis/core/signature"
+	"github.com/saveio/themis/core/types"
+	cutils "github.com/saveio/themis/core/utils"
+	"github.com/saveio/themis/crypto/keypair"
+	sig "github.com/saveio/themis/crypto/signature"
+	httpcom "github.com/saveio/themis/http/base/common"
+	rpccommon "github.com/saveio/themis/http/base/common"
+	"github.com/saveio/themis/smartcontract/service/native/dns"
+	"github.com/saveio/themis/smartcontract/service/native/governance"
+	"github.com/saveio/themis/smartcontract/service/native/usdt"
+	"github.com/saveio/themis/smartcontract/service/native/utils"
+	"github.com/saveio/themis/smartcontract/service/wasmvm"
+	cstates "github.com/saveio/themis/smartcontract/states"
+	"github.com/saveio/themis/vm/wasmvm/exec"
 )
 
 const (
 	VERSION_TRANSACTION    = byte(0)
-	VERSION_CONTRACT_ONT   = byte(0)
-	VERSION_CONTRACT_ONG   = byte(0)
+	VERSION_CONTRACT_USDT  = byte(0)
 	CONTRACT_TRANSFER      = "transfer"
 	CONTRACT_TRANSFER_FROM = "transferFrom"
 	CONTRACT_APPROVE       = "approve"
 
-	ASSET_ONT = "ont"
-	ASSET_ONG = "ong"
+	APPROVE_CANDIDATE = "approveCandidate"
+	REJECT_CANDIDATE  = "rejectCandidate"
+
+	ASSET_USDT = "usdt"
+
+	KIND_CONSENSUS = "consensus"
+	KIND_DNS       = "dns"
 )
 
 func init() {
@@ -86,10 +96,8 @@ func GetAccountBalance(address, asset string) (uint64, error) {
 	}
 	var balance uint64
 	switch strings.ToLower(asset) {
-	case "ont":
-		balance, err = strconv.ParseUint(balances.Ont, 10, 64)
-	case "ong":
-		balance, err = strconv.ParseUint(balances.Ong, 10, 64)
+	case "usdt":
+		balance, err = strconv.ParseUint(balances.Usdt, 10, 64)
 	default:
 		return 0, fmt.Errorf("unsupport asset:%s", asset)
 	}
@@ -112,7 +120,7 @@ func GetAllowance(asset, from, to string) (string, error) {
 	return balance, nil
 }
 
-//Transfer ont|ong from account to another account
+//Transfer usdt from account to another account
 func Transfer(gasPrice, gasLimit uint64, signer *account.Account, asset, from, to string, amount uint64) (string, error) {
 	mutable, err := TransferTx(gasPrice, gasLimit, asset, signer.Address.ToBase58(), to, amount)
 	if err != nil {
@@ -183,7 +191,7 @@ func ApproveTx(gasPrice, gasLimit uint64, asset string, from, to string, amount 
 	if err != nil {
 		return nil, fmt.Errorf("To address:%s invalid:%s", to, err)
 	}
-	var state = &ont.State{
+	var state = &usdt.State{
 		From:  fromAddr,
 		To:    toAddr,
 		Value: amount,
@@ -191,12 +199,9 @@ func ApproveTx(gasPrice, gasLimit uint64, asset string, from, to string, amount 
 	var version byte
 	var contractAddr common.Address
 	switch strings.ToLower(asset) {
-	case ASSET_ONT:
-		version = VERSION_CONTRACT_ONT
-		contractAddr = utils.OntContractAddress
-	case ASSET_ONG:
-		version = VERSION_CONTRACT_ONG
-		contractAddr = utils.OngContractAddress
+	case ASSET_USDT:
+		version = VERSION_CONTRACT_USDT
+		contractAddr = utils.UsdtContractAddress
 	default:
 		return nil, fmt.Errorf("Unsupport asset:%s", asset)
 	}
@@ -217,8 +222,8 @@ func TransferTx(gasPrice, gasLimit uint64, asset, from, to string, amount uint64
 	if err != nil {
 		return nil, fmt.Errorf("to address:%s invalid:%s", to, err)
 	}
-	var sts []*ont.State
-	sts = append(sts, &ont.State{
+	var sts []*usdt.State
+	sts = append(sts, &usdt.State{
 		From:  fromAddr,
 		To:    toAddr,
 		Value: amount,
@@ -226,12 +231,9 @@ func TransferTx(gasPrice, gasLimit uint64, asset, from, to string, amount uint64
 	var version byte
 	var contractAddr common.Address
 	switch strings.ToLower(asset) {
-	case ASSET_ONT:
-		version = VERSION_CONTRACT_ONT
-		contractAddr = utils.OntContractAddress
-	case ASSET_ONG:
-		version = VERSION_CONTRACT_ONG
-		contractAddr = utils.OngContractAddress
+	case ASSET_USDT:
+		version = VERSION_CONTRACT_USDT
+		contractAddr = utils.UsdtContractAddress
 	default:
 		return nil, fmt.Errorf("unsupport asset:%s", asset)
 	}
@@ -256,7 +258,7 @@ func TransferFromTx(gasPrice, gasLimit uint64, asset, sender, from, to string, a
 	if err != nil {
 		return nil, fmt.Errorf("to address:%s invalid:%s", to, err)
 	}
-	transferFrom := &ont.TransferFrom{
+	transferFrom := &usdt.TransferFrom{
 		Sender: senderAddr,
 		From:   fromAddr,
 		To:     toAddr,
@@ -265,16 +267,52 @@ func TransferFromTx(gasPrice, gasLimit uint64, asset, sender, from, to string, a
 	var version byte
 	var contractAddr common.Address
 	switch strings.ToLower(asset) {
-	case ASSET_ONT:
-		version = VERSION_CONTRACT_ONT
-		contractAddr = utils.OntContractAddress
-	case ASSET_ONG:
-		version = VERSION_CONTRACT_ONG
-		contractAddr = utils.OngContractAddress
+	case ASSET_USDT:
+		version = VERSION_CONTRACT_USDT
+		contractAddr = utils.UsdtContractAddress
 	default:
 		return nil, fmt.Errorf("unsupport asset:%s", asset)
 	}
 	invokeCode, err := cutils.BuildNativeInvokeCode(contractAddr, version, CONTRACT_TRANSFER_FROM, []interface{}{transferFrom})
+	if err != nil {
+		return nil, fmt.Errorf("build invoke code error:%s", err)
+	}
+	mutableTx := NewInvokeTransaction(gasPrice, gasLimit, invokeCode)
+	return mutableTx, nil
+}
+
+func ApproveCandidateTx(gasPrice, gasLimit uint64, reject bool, peerPubkey string, role string) (*types.MutableTransaction, error) {
+	var version byte
+	var contractAddr common.Address
+	var method string
+	var param interface{}
+
+	switch strings.ToLower(role) {
+	case KIND_CONSENSUS:
+		version = VERSION_TRANSACTION
+		contractAddr = utils.GovernanceContractAddress
+		if reject {
+			method = REJECT_CANDIDATE
+			param = &governance.RejectCandidateParam{PeerPubkey: peerPubkey}
+		} else {
+			method = APPROVE_CANDIDATE
+			param = &governance.ApproveCandidateParam{PeerPubkey: peerPubkey}
+		}
+	case KIND_DNS:
+		version = VERSION_TRANSACTION
+		contractAddr = utils.OntDNSAddress
+		if reject {
+			method = REJECT_CANDIDATE
+			param = &dns.PubKeyParam{PeerPubkey: peerPubkey}
+		} else {
+			method = APPROVE_CANDIDATE
+			param = &dns.ApproveCandidateParam{PeerPubkey: peerPubkey}
+		}
+	default:
+		return nil, fmt.Errorf("Unsupport role:%s", role)
+	}
+
+	invokeCode, err := cutils.BuildNativeInvokeCode(contractAddr, version, method, []interface{}{param})
 	if err != nil {
 		return nil, fmt.Errorf("build invoke code error:%s", err)
 	}
@@ -290,7 +328,7 @@ func NewInvokeTransaction(gasPrice, gasLimit uint64, invokeCode []byte) *types.M
 	tx := &types.MutableTransaction{
 		GasPrice: gasPrice,
 		GasLimit: gasLimit,
-		TxType:   types.InvokeNeo,
+		TxType:   types.Invoke,
 		Nonce:    rand.Uint32(),
 		Payload:  invokePayload,
 		Sigs:     make([]types.Sig, 0, 0),
@@ -434,9 +472,14 @@ func Sign(data []byte, signer *account.Account) ([]byte, error) {
 	return sigData, nil
 }
 
-//SendRawTransaction send a transaction to ontology network, and return hash of the transaction
+//SendRawTransaction send a transaction to themis network, and return hash of the transaction
 func SendRawTransaction(tx *types.Transaction) (string, error) {
-	txData := hex.EncodeToString(common.SerializeToBytes(tx))
+	var buffer bytes.Buffer
+	err := tx.Serialize(&buffer)
+	if err != nil {
+		return "", fmt.Errorf("serialize error:%s", err)
+	}
+	txData := hex.EncodeToString(buffer.Bytes())
 	return SendRawTransactionData(txData)
 }
 
@@ -453,12 +496,12 @@ func SendRawTransactionData(txData string) (string, error) {
 	return hexHash, nil
 }
 
-func PrepareSendRawTransaction(txData string) (*httpcom.PreExecuteResult, error) {
+func PrepareSendRawTransaction(txData string) (*cstates.PreExecResult, error) {
 	data, ontErr := sendRpcRequest("sendrawtransaction", []interface{}{txData, 1})
 	if ontErr != nil {
 		return nil, ontErr.Error
 	}
-	preResult := &httpcom.PreExecuteResult{}
+	preResult := &cstates.PreExecResult{}
 	err := json.Unmarshal(data, &preResult)
 	if err != nil {
 		return nil, fmt.Errorf("json.Unmarshal PreExecResult:%s error:%s", data, err)
@@ -467,7 +510,7 @@ func PrepareSendRawTransaction(txData string) (*httpcom.PreExecuteResult, error)
 }
 
 //GetSmartContractEvent return smart contract event execute by invoke transaction by hex string code
-func GetSmartContractEvent(txHash string) (*httpcom.ExecuteNotify, error) {
+func GetSmartContractEvent(txHash string) (*rpccommon.ExecuteNotify, error) {
 	data, ontErr := sendRpcRequest("getsmartcodeevent", []interface{}{txHash})
 	if ontErr != nil {
 		switch ontErr.ErrorCode {
@@ -476,7 +519,7 @@ func GetSmartContractEvent(txHash string) (*httpcom.ExecuteNotify, error) {
 		}
 		return nil, ontErr.Error
 	}
-	notifies := &httpcom.ExecuteNotify{}
+	notifies := &rpccommon.ExecuteNotify{}
 	err := json.Unmarshal(data, &notifies)
 	if err != nil {
 		return nil, fmt.Errorf("json.Unmarshal SmartContactEvent:%s error:%s", data, err)
@@ -554,27 +597,6 @@ func GetBlockData(hashOrHeight interface{}) ([]byte, error) {
 	return blockData, nil
 }
 
-func GetCrossChainMsg(height uint32) ([]byte, error) {
-	data, ontErr := sendRpcRequest("getcrosschainmsg", []interface{}{height})
-	if ontErr != nil {
-		switch ontErr.ErrorCode {
-		case ERROR_INVALID_PARAMS:
-			return nil, fmt.Errorf("invalid block hash or block height:%d", height)
-		}
-		return nil, ontErr.Error
-	}
-	hexStr := ""
-	err := json.Unmarshal(data, &hexStr)
-	if err != nil {
-		return nil, fmt.Errorf("json.Unmarshal error:%s", err)
-	}
-	crossChainMsg, err := hex.DecodeString(hexStr)
-	if err != nil {
-		return nil, fmt.Errorf("hex.DecodeString error:%s", err)
-	}
-	return crossChainMsg, nil
-}
-
 func GetBlockCount() (uint32, error) {
 	data, ontErr := sendRpcRequest("getblockcount", []interface{}{})
 	if ontErr != nil {
@@ -609,7 +631,7 @@ func DeployContract(
 	gasPrice,
 	gasLimit uint64,
 	signer *account.Account,
-	vmtype payload.VmType,
+	needStorage bool,
 	code,
 	cname,
 	cversion,
@@ -621,10 +643,7 @@ func DeployContract(
 	if err != nil {
 		return "", fmt.Errorf("hex.DecodeString error:%s", err)
 	}
-	mutable, err := NewDeployCodeTransaction(gasPrice, gasLimit, c, vmtype, cname, cversion, cauthor, cemail, cdesc)
-	if err != nil {
-		return "", err
-	}
+	mutable := NewDeployCodeTransaction(gasPrice, gasLimit, c, needStorage, cname, cversion, cauthor, cemail, cdesc)
 
 	err = SignTransaction(signer, mutable)
 	if err != nil {
@@ -642,27 +661,67 @@ func DeployContract(
 }
 
 func PrepareDeployContract(
-	vmtype payload.VmType,
+	needStorage bool,
 	code,
 	cname,
 	cversion,
 	cauthor,
 	cemail,
-	cdesc string) (*httpcom.PreExecuteResult, error) {
+	cdesc string) (*cstates.PreExecResult, error) {
 	c, err := hex.DecodeString(code)
 	if err != nil {
 		return nil, fmt.Errorf("hex.DecodeString error:%s", err)
 	}
-	mutable, err := NewDeployCodeTransaction(0, 0, c, vmtype, cname, cversion, cauthor, cemail, cdesc)
+	mutable := NewDeployCodeTransaction(0, 0, c, needStorage, cname, cversion, cauthor, cemail, cdesc)
+	tx, _ := mutable.IntoImmutable()
+	var buffer bytes.Buffer
+	err = tx.Serialize(&buffer)
 	if err != nil {
-		return nil, fmt.Errorf("NewDeployCodeTransaction error:%s", err)
+		return nil, fmt.Errorf("tx serialize error:%s", err)
 	}
-	tx, err := mutable.IntoImmutable()
-	if err != nil {
-		return nil, err
-	}
-	txData := hex.EncodeToString(common.SerializeToBytes(tx))
+	txData := hex.EncodeToString(buffer.Bytes())
 	return PrepareSendRawTransaction(txData)
+}
+
+func InvokeNativeContract(
+	gasPrice,
+	gasLimit uint64,
+	signer *account.Account,
+	contractAddress common.Address,
+	version byte,
+	method string,
+	params []interface{},
+) (string, error) {
+	tx, err := httpcom.NewNativeInvokeTransaction(gasPrice, gasLimit, contractAddress, version, method, params)
+	if err != nil {
+		return "", err
+	}
+	return InvokeSmartContract(signer, tx)
+}
+
+//Invoke wasm smart contract
+//methodName is wasm contract action name
+//paramType  is Json or Raw format
+//version should be greater than 0 (0 is reserved for test)
+func InvokeWasmVMContract(
+	gasPrice,
+	gasLimit uint64,
+	siger *account.Account,
+	cversion byte, //version of contract
+	contractAddress common.Address,
+	method string,
+	paramType wasmvm.ParamType,
+	params []interface{}) (string, error) {
+
+	invokeCode, err := BuildWasmVMInvokeCode(contractAddress, method, paramType, cversion, params)
+	if err != nil {
+		return "", err
+	}
+	tx, err := httpcom.NewSmartContractTransaction(gasPrice, gasLimit, invokeCode)
+	if err != nil {
+		return "", err
+	}
+	return InvokeSmartContract(siger, tx)
 }
 
 //Invoke neo vm smart contract. if isPreExec is true, the invoke will not really execute
@@ -673,20 +732,6 @@ func InvokeNeoVMContract(
 	smartcodeAddress common.Address,
 	params []interface{}) (string, error) {
 	tx, err := httpcom.NewNeovmInvokeTransaction(gasPrice, gasLimit, smartcodeAddress, params)
-	if err != nil {
-		return "", err
-	}
-	return InvokeSmartContract(signer, tx)
-}
-
-//Invoke wasm vm smart contract. if isPreExec is true, the invoke will not really execute
-func InvokeWasmVMContract(
-	gasPrice,
-	gasLimit uint64,
-	signer *account.Account,
-	smartcodeAddress common.Address,
-	params []interface{}) (string, error) {
-	tx, err := cutils.NewWasmVMInvokeTransaction(gasPrice, gasLimit, smartcodeAddress, params)
 	if err != nil {
 		return "", err
 	}
@@ -713,7 +758,7 @@ func InvokeSmartContract(signer *account.Account, tx *types.MutableTransaction) 
 func PrepareInvokeNeoVMContract(
 	contractAddress common.Address,
 	params []interface{},
-) (*httpcom.PreExecuteResult, error) {
+) (*cstates.PreExecResult, error) {
 	mutable, err := httpcom.NewNeovmInvokeTransaction(0, 0, contractAddress, params)
 	if err != nil {
 		return nil, err
@@ -724,11 +769,16 @@ func PrepareInvokeNeoVMContract(
 		return nil, err
 	}
 
-	txData := hex.EncodeToString(common.SerializeToBytes(tx))
+	var buffer bytes.Buffer
+	err = tx.Serialize(&buffer)
+	if err != nil {
+		return nil, fmt.Errorf("tx serialize error:%s", err)
+	}
+	txData := hex.EncodeToString(buffer.Bytes())
 	return PrepareSendRawTransaction(txData)
 }
 
-func PrepareInvokeCodeNeoVMContract(code []byte) (*httpcom.PreExecuteResult, error) {
+func PrepareInvokeCodeNeoVMContract(code []byte) (*cstates.PreExecResult, error) {
 	mutable, err := httpcom.NewSmartContractTransaction(0, 0, code)
 	if err != nil {
 		return nil, err
@@ -737,23 +787,12 @@ func PrepareInvokeCodeNeoVMContract(code []byte) (*httpcom.PreExecuteResult, err
 	if err != nil {
 		return nil, err
 	}
-	txData := hex.EncodeToString(common.SerializeToBytes(tx))
-	return PrepareSendRawTransaction(txData)
-}
-
-//prepare invoke wasm
-func PrepareInvokeWasmVMContract(contractAddress common.Address, params []interface{}) (*httpcom.PreExecuteResult, error) {
-	mutable, err := cutils.NewWasmVMInvokeTransaction(0, 0, contractAddress, params)
+	var buffer bytes.Buffer
+	err = tx.Serialize(&buffer)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("tx serialize error:%s", err)
 	}
-
-	tx, err := mutable.IntoImmutable()
-	if err != nil {
-		return nil, err
-	}
-
-	txData := hex.EncodeToString(common.SerializeToBytes(tx))
+	txData := hex.EncodeToString(buffer.Bytes())
 	return PrepareSendRawTransaction(txData)
 }
 
@@ -761,7 +800,7 @@ func PrepareInvokeNativeContract(
 	contractAddress common.Address,
 	version byte,
 	method string,
-	params []interface{}) (*httpcom.PreExecuteResult, error) {
+	params []interface{}) (*cstates.PreExecResult, error) {
 	mutable, err := httpcom.NewNativeInvokeTransaction(0, 0, contractAddress, version, method, params)
 	if err != nil {
 		return nil, err
@@ -770,17 +809,27 @@ func PrepareInvokeNativeContract(
 	if err != nil {
 		return nil, err
 	}
-	txData := hex.EncodeToString(common.SerializeToBytes(tx))
+	var buffer bytes.Buffer
+	err = tx.Serialize(&buffer)
+	if err != nil {
+		return nil, fmt.Errorf("tx serialize error:%s", err)
+	}
+	txData := hex.EncodeToString(buffer.Bytes())
 	return PrepareSendRawTransaction(txData)
 }
 
 //NewDeployCodeTransaction return a smart contract deploy transaction instance
-func NewDeployCodeTransaction(gasPrice, gasLimit uint64, code []byte, vmType payload.VmType,
-	cname, cversion, cauthor, cemail, cdesc string) (*types.MutableTransaction, error) {
+func NewDeployCodeTransaction(gasPrice, gasLimit uint64, code []byte, needStorage bool,
+	cname, cversion, cauthor, cemail, cdesc string) *types.MutableTransaction {
 
-	deployPayload, err := payload.NewDeployCode(code, vmType, cname, cversion, cauthor, cemail, cdesc)
-	if err != nil {
-		return nil, err
+	deployPayload := &payload.DeployCode{
+		Code:        code,
+		NeedStorage: needStorage,
+		Name:        cname,
+		Version:     cversion,
+		Author:      cauthor,
+		Email:       cemail,
+		Description: cdesc,
 	}
 	tx := &types.MutableTransaction{
 		Version:  VERSION_TRANSACTION,
@@ -791,7 +840,104 @@ func NewDeployCodeTransaction(gasPrice, gasLimit uint64, code []byte, vmType pay
 		GasLimit: gasLimit,
 		Sigs:     make([]types.Sig, 0, 0),
 	}
-	return tx, nil
+	return tx
+}
+
+//for wasm vm
+//build param bytes for wasm contract
+func buildWasmContractParam(params []interface{}, paramType wasmvm.ParamType) ([]byte, error) {
+	switch paramType {
+	case wasmvm.Json:
+		args := make([]exec.Param, len(params))
+
+		for i, param := range params {
+			switch param.(type) {
+			case string:
+				arg := exec.Param{Ptype: "string", Pval: param.(string)}
+				args[i] = arg
+			case int:
+				arg := exec.Param{Ptype: "int", Pval: strconv.Itoa(param.(int))}
+				args[i] = arg
+			case int64:
+				arg := exec.Param{Ptype: "int64", Pval: strconv.FormatInt(param.(int64), 10)}
+				args[i] = arg
+			case []int:
+				bf := bytes.NewBuffer(nil)
+				array := param.([]int)
+				for i, tmp := range array {
+					bf.WriteString(strconv.Itoa(tmp))
+					if i != len(array)-1 {
+						bf.WriteString(",")
+					}
+				}
+				arg := exec.Param{Ptype: "int_array", Pval: bf.String()}
+				args[i] = arg
+			case []int64:
+				bf := bytes.NewBuffer(nil)
+				array := param.([]int64)
+				for i, tmp := range array {
+					bf.WriteString(strconv.FormatInt(tmp, 10))
+					if i != len(array)-1 {
+						bf.WriteString(",")
+					}
+				}
+				arg := exec.Param{Ptype: "int_array", Pval: bf.String()}
+				args[i] = arg
+			default:
+				return nil, fmt.Errorf("not a supported type :%v\n", param)
+			}
+		}
+
+		bs, err := json.Marshal(exec.Args{args})
+		if err != nil {
+			return nil, err
+		}
+		return bs, nil
+	case wasmvm.Raw:
+		bf := bytes.NewBuffer(nil)
+		for _, param := range params {
+			switch param.(type) {
+			case string:
+				tmp := bytes.NewBuffer(nil)
+				serialization.WriteString(tmp, param.(string))
+				bf.Write(tmp.Bytes())
+
+			case int:
+				tmpBytes := make([]byte, 4)
+				binary.LittleEndian.PutUint32(tmpBytes, uint32(param.(int)))
+				bf.Write(tmpBytes)
+
+			case int64:
+				tmpBytes := make([]byte, 8)
+				binary.LittleEndian.PutUint64(tmpBytes, uint64(param.(int64)))
+				bf.Write(tmpBytes)
+
+			default:
+				return nil, fmt.Errorf("not a supported type :%v\n", param)
+			}
+		}
+		return bf.Bytes(), nil
+	default:
+		return nil, fmt.Errorf("unsupported type")
+	}
+}
+
+//BuildWasmVMInvokeCode return wasn vm invoke code
+func BuildWasmVMInvokeCode(smartcodeAddress common.Address, methodName string, paramType wasmvm.ParamType, version byte, params []interface{}) ([]byte, error) {
+	contract := &cstates.ContractInvokeParam{}
+	contract.Address = smartcodeAddress
+	contract.Method = methodName
+	contract.Version = version
+
+	argbytes, err := buildWasmContractParam(params, paramType)
+
+	if err != nil {
+		return nil, fmt.Errorf("build wasm contract param failed:%s", err)
+	}
+	contract.Args = argbytes
+	bf := bytes.NewBuffer(nil)
+	contract.Serialize(bf)
+	return bf.Bytes(), nil
 }
 
 //ParseNeoVMContractReturnTypeBool return bool value of smart contract execute code.
@@ -820,58 +966,4 @@ func ParseNeoVMContractReturnTypeString(hexStr string) (string, error) {
 		return "", fmt.Errorf("hex.DecodeString:%s error:%s", hexStr, err)
 	}
 	return string(data), nil
-}
-
-func ParseWasmVMContractReturnTypeByteArray(hexStr string) (string, error) {
-	hexbs, err := common.HexToBytes(hexStr)
-	if err != nil {
-		return "", fmt.Errorf("common.HexToBytes:%s error:%s", hexStr, err)
-	}
-	source := common.NewZeroCopySource(hexbs)
-	bs, _, irregular, eof := source.NextVarBytes()
-	if irregular {
-		return "", fmt.Errorf("ParseWasmVMContractReturnTypeByteArray:%s error:%s", hexStr, common.ErrIrregularData)
-	}
-	if eof {
-		return "", fmt.Errorf("ParseWasmVMContractReturnTypeByteArray:%s error:%s", hexStr, io.ErrUnexpectedEOF)
-	}
-	return common.ToHexString(bs), nil
-}
-
-//ParseWasmVMContractReturnTypeString return string value of smart contract execute code.
-func ParseWasmVMContractReturnTypeString(hexStr string) (string, error) {
-	hexbs, err := common.HexToBytes(hexStr)
-	if err != nil {
-		return "", fmt.Errorf("common.HexToBytes:%s error:%s", hexStr, err)
-	}
-	source := common.NewZeroCopySource(hexbs)
-	data, _, irregular, eof := source.NextString()
-	if irregular {
-		return "", common.ErrIrregularData
-	}
-	if eof {
-		return "", io.ErrUnexpectedEOF
-	}
-	return data, nil
-}
-
-//ParseWasmVMContractReturnTypeInteger return integer value of smart contract execute code.
-func ParseWasmVMContractReturnTypeInteger(hexStr string) (int64, error) {
-	hexbs, err := common.HexToBytes(hexStr)
-	if err != nil {
-		return 0, fmt.Errorf("common.HexToBytes:%s error:%s", hexStr, err)
-	}
-	bf := bytes.NewBuffer(hexbs)
-	res, err := serialization.ReadUint64(bf)
-	return int64(res), err
-}
-
-//ParseWasmVMContractReturnTypeBool return bool value of smart contract execute code.
-func ParseWasmVMContractReturnTypeBool(hexStr string) (bool, error) {
-	hexbs, err := common.HexToBytes(hexStr)
-	if err != nil {
-		return false, fmt.Errorf("common.HexToBytes:%s error:%s", hexStr, err)
-	}
-	bf := bytes.NewBuffer(hexbs)
-	return serialization.ReadBool(bf)
 }

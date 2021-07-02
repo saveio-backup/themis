@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 // Package common privides functions for http handler call
@@ -27,22 +27,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ontio/ontology-crypto/keypair"
-	"github.com/ontio/ontology/common"
-	"github.com/ontio/ontology/common/constants"
-	"github.com/ontio/ontology/common/log"
-	"github.com/ontio/ontology/core/ledger"
-	"github.com/ontio/ontology/core/payload"
-	"github.com/ontio/ontology/core/types"
-	cutils "github.com/ontio/ontology/core/utils"
-	ontErrors "github.com/ontio/ontology/errors"
-	bactor "github.com/ontio/ontology/http/base/actor"
-	common2 "github.com/ontio/ontology/p2pserver/common"
-	"github.com/ontio/ontology/smartcontract/event"
-	"github.com/ontio/ontology/smartcontract/service/native/ont"
-	"github.com/ontio/ontology/smartcontract/service/native/utils"
-	cstate "github.com/ontio/ontology/smartcontract/states"
-	"github.com/ontio/ontology/vm/neovm"
+	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/common/constants"
+	"github.com/saveio/themis/common/log"
+	"github.com/saveio/themis/core/ledger"
+	"github.com/saveio/themis/core/payload"
+	"github.com/saveio/themis/core/types"
+	cutils "github.com/saveio/themis/core/utils"
+	"github.com/saveio/themis/crypto/keypair"
+	ontErrors "github.com/saveio/themis/errors"
+	bactor "github.com/saveio/themis/http/base/actor"
+	common2 "github.com/saveio/themis/p2pserver/common"
+	"github.com/saveio/themis/smartcontract/event"
+	"github.com/saveio/themis/smartcontract/service/native/ont"
+	"github.com/saveio/themis/smartcontract/service/native/utils"
+	cstate "github.com/saveio/themis/smartcontract/states"
+	"github.com/saveio/themis/vm/neovm"
 )
 
 const MAX_SEARCH_HEIGHT uint32 = 100
@@ -301,13 +301,12 @@ func GetBlockInfo(block *types.Block) BlockInfo {
 }
 
 func GetBalance(address common.Address) (*BalanceOfRsp, error) {
-	balances, height, err := GetContractBalance(0, []common.Address{utils.OntContractAddress, utils.OngContractAddress}, address, true)
+	balances, height, err := GetContractBalance(0, []common.Address{utils.UsdtContractAddress}, address, true)
 	if err != nil {
 		return nil, fmt.Errorf("get ont balance error:%s", err)
 	}
 	return &BalanceOfRsp{
-		Ont:    fmt.Sprintf("%d", balances[0]),
-		Ong:    fmt.Sprintf("%d", balances[1]),
+		Usdt:   fmt.Sprintf("%d", balances[0]),
 		Height: fmt.Sprintf("%d", height),
 	}, nil
 }
@@ -334,10 +333,8 @@ func GetGrantOng(addr common.Address) (string, error) {
 func GetAllowance(asset string, from, to common.Address) (string, error) {
 	var contractAddr common.Address
 	switch strings.ToLower(asset) {
-	case "ont":
-		contractAddr = utils.OntContractAddress
-	case "ong":
-		contractAddr = utils.OngContractAddress
+	case "usdt":
+		contractAddr = utils.UsdtContractAddress
 	default:
 		return "", fmt.Errorf("unsupport asset")
 	}

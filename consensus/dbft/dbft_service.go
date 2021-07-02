@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 package dbft
@@ -24,22 +24,22 @@ import (
 	"time"
 
 	"github.com/ontio/ontology-eventbus/actor"
-	"github.com/ontio/ontology/account"
-	"github.com/ontio/ontology/common"
-	"github.com/ontio/ontology/common/config"
-	"github.com/ontio/ontology/common/log"
-	actorTypes "github.com/ontio/ontology/consensus/actor"
-	"github.com/ontio/ontology/core/genesis"
-	"github.com/ontio/ontology/core/ledger"
-	"github.com/ontio/ontology/core/signature"
-	"github.com/ontio/ontology/core/types"
-	"github.com/ontio/ontology/core/vote"
-	"github.com/ontio/ontology/events"
-	"github.com/ontio/ontology/events/message"
-	msgpack "github.com/ontio/ontology/p2pserver/message/msg_pack"
-	p2pmsg "github.com/ontio/ontology/p2pserver/message/types"
-	p2p "github.com/ontio/ontology/p2pserver/net/protocol"
-	"github.com/ontio/ontology/validator/increment"
+	"github.com/saveio/themis/account"
+	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/common/config"
+	"github.com/saveio/themis/common/log"
+	actorTypes "github.com/saveio/themis/consensus/actor"
+	"github.com/saveio/themis/core/genesis"
+	"github.com/saveio/themis/core/ledger"
+	"github.com/saveio/themis/core/signature"
+	"github.com/saveio/themis/core/types"
+	"github.com/saveio/themis/core/vote"
+	"github.com/saveio/themis/events"
+	"github.com/saveio/themis/events/message"
+	msgpack "github.com/saveio/themis/p2pserver/message/msg_pack"
+	p2pmsg "github.com/saveio/themis/p2pserver/message/types"
+	p2p "github.com/saveio/themis/p2pserver/net/protocol"
+	"github.com/saveio/themis/validator/increment"
 )
 
 type DbftService struct {

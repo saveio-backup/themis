@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 // Package proc provides functions for handle messages from
@@ -29,19 +29,19 @@ import (
 	"sync/atomic"
 
 	"github.com/ontio/ontology-eventbus/actor"
-	"github.com/ontio/ontology/common"
-	"github.com/ontio/ontology/common/config"
-	"github.com/ontio/ontology/common/log"
-	"github.com/ontio/ontology/core/ledger"
-	tx "github.com/ontio/ontology/core/types"
-	"github.com/ontio/ontology/errors"
-	httpcom "github.com/ontio/ontology/http/base/common"
-	msgpack "github.com/ontio/ontology/p2pserver/message/msg_pack"
-	p2p "github.com/ontio/ontology/p2pserver/net/protocol"
-	params "github.com/ontio/ontology/smartcontract/service/native/global_params"
-	nutils "github.com/ontio/ontology/smartcontract/service/native/utils"
-	tc "github.com/ontio/ontology/txnpool/common"
-	"github.com/ontio/ontology/validator/types"
+	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/common/config"
+	"github.com/saveio/themis/common/log"
+	"github.com/saveio/themis/core/ledger"
+	tx "github.com/saveio/themis/core/types"
+	"github.com/saveio/themis/errors"
+	httpcom "github.com/saveio/themis/http/base/common"
+	msgpack "github.com/saveio/themis/p2pserver/message/msg_pack"
+	p2p "github.com/saveio/themis/p2pserver/net/protocol"
+	params "github.com/saveio/themis/smartcontract/service/native/global_params"
+	nutils "github.com/saveio/themis/smartcontract/service/native/utils"
+	tc "github.com/saveio/themis/txnpool/common"
+	"github.com/saveio/themis/validator/types"
 )
 
 type txStats struct {

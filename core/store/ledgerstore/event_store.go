@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 package ledgerstore
@@ -23,13 +23,14 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 
-	"github.com/ontio/ontology/common"
-	"github.com/ontio/ontology/common/log"
-	"github.com/ontio/ontology/common/serialization"
-	scom "github.com/ontio/ontology/core/store/common"
-	"github.com/ontio/ontology/core/store/leveldbstore"
-	"github.com/ontio/ontology/smartcontract/event"
+	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/common/log"
+	"github.com/saveio/themis/common/serialization"
+	scom "github.com/saveio/themis/core/store/common"
+	"github.com/saveio/themis/core/store/leveldbstore"
+	"github.com/saveio/themis/smartcontract/event"
 )
 
 //Saving event notifies gen by smart contract execution
@@ -63,7 +64,162 @@ func (this *EventStore) SaveEventNotifyByTx(txHash common.Uint256, notify *event
 	}
 	key := genEventNotifyByTxKey(txHash)
 	this.store.BatchPut(key, result)
+
+	return this.SaveEventNofityByEventID(txHash, notify)
+}
+
+func (this *EventStore) SaveEventNofityByEventID(txHash common.Uint256, notify *event.ExecuteNotify) error {
+	if notify == nil {
+		return fmt.Errorf("notify is nil")
+	}
+
+	exist := make(map[string]struct{}, 0)
+	for _, notifyInfo := range notify.Notify {
+		// event id 0 means no need to store
+		if notifyInfo.EventIdentifier == 0 {
+			continue
+		}
+
+		var addresses []common.Address
+
+		if len(notifyInfo.Addresses) == 0 {
+			addresses = append(addresses, common.ADDRESS_EMPTY)
+		} else {
+			addresses = notifyInfo.Addresses
+		}
+
+		for _, address := range addresses {
+			existKey := fmt.Sprintf("%s-%s-%d", notifyInfo.ContractAddress.ToBase58(), address.ToBase58(), notifyInfo.EventIdentifier)
+			if _, ok := exist[existKey]; ok {
+				continue
+			}
+			// use random to distinguish events with same event id
+			random := rand.Uint32()
+			key, err := this.getEventNotifyByEventIDKey(notifyInfo.ContractAddress, address, notifyInfo.EventIdentifier, random)
+			if err != nil {
+				return err
+			}
+			value := bytes.NewBuffer(nil)
+			txHash.Serialize(value)
+
+			this.store.BatchPut(key, value.Bytes())
+			exist[existKey] = struct{}{}
+		}
+	}
 	return nil
+}
+
+func (this *EventStore) getEventNotifyByEventIDKey(contractAddress common.Address, address common.Address, eventId uint32, random uint32) ([]byte, error) {
+	prefix, err := this.getEventNotifyByEventIDKeyPrefix(contractAddress, address, eventId)
+	if err != nil {
+		return nil, err
+	}
+
+	key := bytes.NewBuffer(prefix)
+	serialization.WriteUint32(key, random)
+
+	return key.Bytes(), nil
+}
+
+func (this *EventStore) getEventNotifyByEventIDKeyPrefix(contractAddress common.Address, address common.Address, eventId uint32) ([]byte, error) {
+	key := bytes.NewBuffer(nil)
+	err := contractAddress.Serialize(key)
+	if err != nil {
+		return nil, err
+	}
+
+	err = address.Serialize(key)
+	if err != nil {
+		return nil, err
+	}
+
+	// eventId 0 means find all the events
+	if eventId != 0 {
+		serialization.WriteUint32(key, eventId)
+	}
+
+	return key.Bytes(), nil
+}
+
+func (this *EventStore) getAllEventNotifyKeyPrefix(contractAddress common.Address) ([]byte, error) {
+	key := bytes.NewBuffer(nil)
+	err := contractAddress.Serialize(key)
+	if err != nil {
+		return nil, err
+	}
+	return key.Bytes(), nil
+}
+
+func (this *EventStore) GetEventNotifyTxHashByHeights(contractAddress common.Address, addressBytes []byte, eventId uint32) ([]common.Uint256, error) {
+	var txHashes []common.Uint256
+
+	var prefix []byte
+	if addressBytes != nil {
+		var err error
+		var address common.Address
+		copy(address[:], addressBytes[:])
+		prefix, err = this.getEventNotifyByEventIDKeyPrefix(contractAddress, address, eventId)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		var err error
+		prefix, err = this.getAllEventNotifyKeyPrefix(contractAddress)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	iter := this.store.NewIterator(prefix)
+
+	defer iter.Release()
+	for iter.Next() {
+		var txHash common.Uint256
+
+		reader := bytes.NewBuffer(iter.Value())
+		err := txHash.Deserialize(reader)
+		if err != nil {
+			return nil, fmt.Errorf("ReadUint32 error %s", err)
+		}
+
+		txHashes = append(txHashes, txHash)
+	}
+
+	if err := iter.Error(); err != nil {
+		return nil, err
+	}
+
+	return txHashes, nil
+}
+
+func (this *EventStore) GetEventNotifyTxHashByEventID(contractAddress common.Address, address common.Address, eventId uint32) ([]common.Uint256, error) {
+	var txHashes []common.Uint256
+
+	prefix, err := this.getEventNotifyByEventIDKeyPrefix(contractAddress, address, eventId)
+	if err != nil {
+		return nil, err
+	}
+
+	iter := this.store.NewIterator(prefix)
+
+	defer iter.Release()
+	for iter.Next() {
+		var txHash common.Uint256
+
+		reader := bytes.NewBuffer(iter.Value())
+		err := txHash.Deserialize(reader)
+		if err != nil {
+			return nil, fmt.Errorf("ReadUint32 error %s", err)
+		}
+
+		txHashes = append(txHashes, txHash)
+	}
+
+	if err := iter.Error(); err != nil {
+		return nil, err
+	}
+
+	return txHashes, nil
 }
 
 //SaveEventNotifyByBlock persist transaction hash which have event notify to store

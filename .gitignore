@@ -35,3 +35,5 @@ glide.lock
 docker/payload
 config.json
 peers.recent
+themis
+replace.sh

@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 package txnpool
@@ -25,16 +25,16 @@ import (
 	"time"
 
 	"github.com/ontio/ontology-eventbus/actor"
-	"github.com/ontio/ontology/common/config"
-	"github.com/ontio/ontology/common/log"
-	"github.com/ontio/ontology/core/genesis"
-	"github.com/ontio/ontology/core/ledger"
-	"github.com/ontio/ontology/core/payload"
-	"github.com/ontio/ontology/core/types"
-	tc "github.com/ontio/ontology/txnpool/common"
-	tp "github.com/ontio/ontology/txnpool/proc"
-	"github.com/ontio/ontology/validator/stateful"
-	"github.com/ontio/ontology/validator/stateless"
+	"github.com/saveio/themis/common/config"
+	"github.com/saveio/themis/common/log"
+	"github.com/saveio/themis/core/genesis"
+	"github.com/saveio/themis/core/ledger"
+	"github.com/saveio/themis/core/payload"
+	"github.com/saveio/themis/core/types"
+	tc "github.com/saveio/themis/txnpool/common"
+	tp "github.com/saveio/themis/txnpool/proc"
+	"github.com/saveio/themis/validator/stateful"
+	"github.com/saveio/themis/validator/stateless"
 )
 
 func TestMain(m *testing.M) {

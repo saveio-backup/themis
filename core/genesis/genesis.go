@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2018 The ontology Authors
- * This file is part of The ontology library.
+ * Copyright (C) 2019 The themis Authors
+ * This file is part of The themis library.
  *
- * The ontology is free software: you can redistribute it and/or modify
+ * The themis is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * The ontology is distributed in the hope that it will be useful,
+ * The themis is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public License
- * along with The ontology.  If not, see <http://www.gnu.org/licenses/>.
+ * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 package genesis
@@ -24,19 +24,20 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ontio/ontology-crypto/keypair"
-	"github.com/ontio/ontology/common"
-	"github.com/ontio/ontology/common/config"
-	"github.com/ontio/ontology/common/constants"
-	vconfig "github.com/ontio/ontology/consensus/vbft/config"
-	"github.com/ontio/ontology/core/payload"
-	"github.com/ontio/ontology/core/types"
-	"github.com/ontio/ontology/core/utils"
-	"github.com/ontio/ontology/smartcontract/service/native/global_params"
-	"github.com/ontio/ontology/smartcontract/service/native/governance"
-	"github.com/ontio/ontology/smartcontract/service/native/ont"
-	nutils "github.com/ontio/ontology/smartcontract/service/native/utils"
-	"github.com/ontio/ontology/smartcontract/service/neovm"
+	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/common/config"
+	"github.com/saveio/themis/common/constants"
+	vconfig "github.com/saveio/themis/consensus/vbft/config"
+	"github.com/saveio/themis/core/payload"
+	"github.com/saveio/themis/core/types"
+	"github.com/saveio/themis/core/utils"
+	"github.com/saveio/themis/crypto/keypair"
+	"github.com/saveio/themis/smartcontract/service/native/dns"
+	"github.com/saveio/themis/smartcontract/service/native/global_params"
+	"github.com/saveio/themis/smartcontract/service/native/governance"
+	"github.com/saveio/themis/smartcontract/service/native/ont"
+	nutils "github.com/saveio/themis/smartcontract/service/native/utils"
+	"github.com/saveio/themis/smartcontract/service/neovm"
 )
 
 const (
@@ -45,13 +46,11 @@ const (
 )
 
 var (
-	ONTToken   = newGoverningToken()
-	ONGToken   = newUtilityToken()
-	ONTTokenID = ONTToken.Hash()
-	ONGTokenID = ONGToken.Hash()
+	USDTToken   = newGoverningToken()
+	USDTTokenID = USDTToken.Hash()
 )
 
-var GenBlockTime = config.DEFAULT_GEN_BLOCK_TIME * time.Second
+var GenBlockTime = (config.DEFAULT_GEN_BLOCK_TIME * time.Second)
 
 var INIT_PARAM = map[string]string{
 	"gasPrice": "0",
@@ -95,25 +94,23 @@ func BuildGenesisBlock(defaultBookkeeper []keypair.PublicKey, genesisConfig *con
 	}
 
 	//block
-	ont := newGoverningToken()
-	ong := newUtilityToken()
+	usdt := newGoverningToken()
 	param := newParamContract()
 	oid := deployOntIDContract()
 	auth := deployAuthContract()
-	govConfigTx := newGovConfigTx()
+	config := newConfig()
 
 	genesisBlock := &types.Block{
 		Header: genesisHeader,
 		Transactions: []*types.Transaction{
-			ont,
-			ong,
+			usdt,
 			param,
 			oid,
 			auth,
-			govConfigTx,
+			config,
 			newGoverningInit(),
-			newUtilityInit(),
 			newParamInit(),
+			newDNSInit(),
 			govConfig,
 		},
 	}
@@ -122,27 +119,14 @@ func BuildGenesisBlock(defaultBookkeeper []keypair.PublicKey, genesisConfig *con
 }
 
 func newGoverningToken() *types.Transaction {
-	mutable, err := utils.NewDeployTransaction(nutils.OntContractAddress[:], "ONT", "1.0",
-		"Ontology Team", "contact@ont.io", "Ontology Network ONT Token", payload.NEOVM_TYPE)
+	mutable, err := utils.NewDeployTransaction(nutils.UsdtContractAddress[:], "USDT", "1.0",
+		"xxx Team", "contact@xxx.io", "xxx USDT Token", payload.NEOVM_TYPE)
 	if err != nil {
-		panic("[NewDeployTransaction] construct genesis governing token transaction error ")
+		panic("[NewDeployTransaction] construct usdt governing token transaction error ")
 	}
 	tx, err := mutable.IntoImmutable()
 	if err != nil {
-		panic("construct genesis governing token transaction error ")
-	}
-	return tx
-}
-
-func newUtilityToken() *types.Transaction {
-	mutable, err := utils.NewDeployTransaction(nutils.OngContractAddress[:], "ONG", "1.0",
-		"Ontology Team", "contact@ont.io", "Ontology Network ONG Token", payload.NEOVM_TYPE)
-	if err != nil {
-		panic("[NewDeployTransaction] construct genesis governing token transaction error ")
-	}
-	tx, err := mutable.IntoImmutable()
-	if err != nil {
-		panic("construct genesis utility token transaction error ")
+		panic("constract genesis governing token transaction error ")
 	}
 	return tx
 }
@@ -161,15 +145,15 @@ func newParamContract() *types.Transaction {
 	return tx
 }
 
-func newGovConfigTx() *types.Transaction {
+func newConfig() *types.Transaction {
 	mutable, err := utils.NewDeployTransaction(nutils.GovernanceContractAddress[:], "CONFIG", "1.0",
 		"Ontology Team", "contact@ont.io", "Ontology Network Consensus Config", payload.NEOVM_TYPE)
 	if err != nil {
-		panic("[NewDeployTransaction] construct genesis governing token transaction error ")
+		panic("[NewDeployTransaction] construct config transaction error ")
 	}
 	tx, err := mutable.IntoImmutable()
 	if err != nil {
-		panic("construct genesis config transaction error ")
+		panic("constract genesis config transaction error ")
 	}
 	return tx
 }
@@ -218,7 +202,7 @@ func newGoverningInit() *types.Transaction {
 	distribute := []struct {
 		addr  common.Address
 		value uint64
-	}{{addr, constants.ONT_TOTAL_SUPPLY}}
+	}{{addr, constants.USDT_TOTAL_SUPPLY}}
 
 	args := common.NewZeroCopySink(nil)
 	nutils.EncodeVarUint(args, uint64(len(distribute)))
@@ -232,16 +216,6 @@ func newGoverningInit() *types.Transaction {
 	if err != nil {
 		panic("construct genesis governing token transaction error ")
 	}
-	return tx
-}
-
-func newUtilityInit() *types.Transaction {
-	mutable := utils.BuildNativeTransaction(nutils.OngContractAddress, ont.INIT_NAME, []byte{})
-	tx, err := mutable.IntoImmutable()
-	if err != nil {
-		panic("construct genesis utility token transaction error ")
-	}
-
 	return tx
 }
 
@@ -290,7 +264,28 @@ func newGoverConfigInit(config []byte) *types.Transaction {
 	mutable := utils.BuildNativeTransaction(nutils.GovernanceContractAddress, governance.INIT_CONFIG, config)
 	tx, err := mutable.IntoImmutable()
 	if err != nil {
-		panic("construct genesis governing token transaction error ")
+		panic("constract genesis governing token transaction error ")
+	}
+	return tx
+}
+
+func deployDNSContract() *types.Transaction {
+	mutable, err := utils.NewDeployTransaction(nutils.OntDNSAddress[:], "DnsContract", "1.0",
+		"Ontology Team", "contact@ont.io", "Ontology Network Authorization Contract", payload.NEOVM_TYPE)
+	if err != nil {
+		panic("constract genesis dns transaction error ")
+	}
+	tx, err := mutable.IntoImmutable()
+	if err != nil {
+		panic("constract genesis dns transaction error ")
+	}
+	return tx
+}
+func newDNSInit() *types.Transaction {
+	mutable := utils.BuildNativeTransaction(nutils.OntDNSAddress, dns.INIT_NAME, []byte{})
+	tx, err := mutable.IntoImmutable()
+	if err != nil {
+		panic("constract genesis dns transaction error ")
 	}
 	return tx
 }
