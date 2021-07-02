@@ -122,8 +122,3 @@ func GetEventNotifyByEventId(contractAddress common.Address, address common.Addr
 func GetEventNotifyByEventIdAndHeights(contractAddress common.Address, address []byte, eventId, startHeight, endHeight uint32) ([]*event.ExecuteNotify, error) {
 	return ledger.DefLedger.GetEventNotifyByEventIdAndHeight(contractAddress, address, eventId, startHeight, endHeight)
 }
-
-//GetMerkleProof from ledger
-func GetMerkleProof(proofHeight uint32, rootHeight uint32) ([]common.Uint256, error) {
-	return ledger.DefLedger.GetMerkleProof(proofHeight, rootHeight)
-}

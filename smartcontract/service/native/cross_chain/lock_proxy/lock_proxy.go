@@ -32,7 +32,7 @@ import (
 	"github.com/saveio/themis/smartcontract/service/native"
 	"github.com/saveio/themis/smartcontract/service/native/cross_chain/cross_chain_manager"
 	"github.com/saveio/themis/smartcontract/service/native/global_params"
-	"github.com/saveio/themis/smartcontract/service/native/ont"
+	"github.com/saveio/themis/smartcontract/service/native/usdt"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
 
@@ -136,8 +136,7 @@ func BindAssetHash(native *native.NativeService) ([]byte, error) {
 
 func Lock(native *native.NativeService) ([]byte, error) {
 	contract := native.ContextRef.CurrentContext().ContractAddress
-	ontContract := utils.OntContractAddress
-	ongContract := utils.OngContractAddress
+	ontContract := utils.UsdtContractAddress
 	source := common.NewZeroCopySource(native.Input)
 
 	var lockParam LockParam
@@ -149,18 +148,18 @@ func Lock(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, nil
 	}
 	// currently, only support ont and ong lock operation
-	if lockParam.SourceAssetHash != ontContract && lockParam.SourceAssetHash != ongContract {
-		return utils.BYTE_FALSE, fmt.Errorf("[Lock] only support ont/ong lock, expect:%s or %s, but got:%s", hex.EncodeToString(ontContract[:]), hex.EncodeToString(ongContract[:]), hex.EncodeToString(lockParam.SourceAssetHash[:]))
+	if lockParam.SourceAssetHash != ontContract {
+		return utils.BYTE_FALSE, fmt.Errorf("[Lock] only support ont/ong lock, expect:%s , but got:%s", hex.EncodeToString(ontContract[:]), hex.EncodeToString(lockParam.SourceAssetHash[:]))
 	}
 
 	// transfer ont or ong from FromAddress to lockContract
-	state := ont.State{
+	state := usdt.State{
 		From:  lockParam.FromAddress,
 		To:    contract,
 		Value: lockParam.Value,
 	}
 	transferInput := getTransferInput(state)
-	if _, err := native.NativeCall(lockParam.SourceAssetHash, ont.TRANSFER_NAME, transferInput); err != nil {
+	if _, err := native.NativeCall(lockParam.SourceAssetHash, usdt.TRANSFER_NAME, transferInput); err != nil {
 		return utils.BYTE_FALSE, fmt.Errorf("[Lock] NativeCall contract:%s 'transfer(%s, %s, %d)' error:%s", hex.EncodeToString(lockParam.SourceAssetHash[:]), lockParam.FromAddress.ToBase58(), hex.EncodeToString(contract[:]), lockParam.Value, err)
 	}
 
@@ -215,8 +214,7 @@ func Unlock(native *native.NativeService) ([]byte, error) {
 	if !native.ContextRef.CheckWitness(utils.CrossChainContractAddress) {
 		return utils.BYTE_FALSE, fmt.Errorf("[Unlock] can ONLY be invoked by CrossChainContractAddress:%s Contract, checkwitness failed!", hex.EncodeToString(utils.CrossChainContractAddress[:]))
 	}
-	ontContract := utils.OntContractAddress
-	ongContract := utils.OngContractAddress
+	ontContract := utils.UsdtContractAddress
 
 	var unlockParam UnlockParam
 	if err := unlockParam.Deserialization(common.NewZeroCopySource(native.Input)); err != nil {
@@ -237,8 +235,8 @@ func Unlock(native *native.NativeService) ([]byte, error) {
 	}
 
 	// currently, only support ont and ong unlock operation
-	if !bytes.Equal(args.TargetAssetHash, ontContract[:]) && !bytes.Equal(args.TargetAssetHash, ongContract[:]) {
-		return utils.BYTE_FALSE, fmt.Errorf("[Unlock] target asset hash, Is ONT contract?:%t, Is ONG contract?:%t, Args.TargetAssetHash:%s", bytes.Equal(args.TargetAssetHash, ontContract[:]), bytes.Equal(args.ToAddress, ongContract[:]), hex.EncodeToString(args.TargetAssetHash))
+	if !bytes.Equal(args.TargetAssetHash, ontContract[:]) {
+		return utils.BYTE_FALSE, fmt.Errorf("[Unlock] target asset hash, Is ONT contract?:%t, Is ONG contract?:%t, Args.TargetAssetHash:%s", bytes.Equal(args.TargetAssetHash, ontContract[:]), hex.EncodeToString(args.TargetAssetHash))
 	}
 
 	assetAddress, err := common.AddressParseFromBytes(args.TargetAssetHash)
@@ -253,8 +251,8 @@ func Unlock(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_TRUE, nil
 	}
 	// unlock ont or ong from current proxy contract into toAddress
-	transferInput := getTransferInput(ont.State{contract, toAddress, args.Value})
-	if _, err = native.NativeCall(assetAddress, ont.TRANSFER_NAME, transferInput); err != nil {
+	transferInput := getTransferInput(usdt.State{contract, toAddress, args.Value})
+	if _, err = native.NativeCall(assetAddress, usdt.TRANSFER_NAME, transferInput); err != nil {
 		return utils.BYTE_FALSE, fmt.Errorf("[Unlock] NativeCall contract:%s 'transfer(%s, %s, %d)' error:%s", hex.EncodeToString(assetAddress[:]), hex.EncodeToString(contract[:]), toAddress.ToBase58(), args.Value, err)
 	}
 
@@ -292,14 +290,14 @@ func WithdrawONG(native *native.NativeService) ([]byte, error) {
 	}
 	// query unbound ong or allowance
 	allowanceInput := getAllowanceInput()
-	allowanceRes, err := native.NativeCall(utils.OngContractAddress, ont.ALLOWANCE_NAME, allowanceInput)
+	allowanceRes, err := native.NativeCall(utils.UsdtContractAddress, usdt.ALLOWANCE_NAME, allowanceInput)
 	if err != nil {
 		return utils.BYTE_FALSE, fmt.Errorf("[WithdrawONG] invoke ong contract get allowance error:%s", err)
 	}
 	allowance := common.BigIntFromNeoBytes(allowanceRes)
 	// transfer ong to toAddress
 	transferFromInput := getTransferFromInput(toAddress, allowance.Uint64())
-	if _, err = native.NativeCall(utils.OngContractAddress, ont.TRANSFERFROM_NAME, transferFromInput); err != nil {
+	if _, err = native.NativeCall(utils.UsdtContractAddress, usdt.TRANSFERFROM_NAME, transferFromInput); err != nil {
 		return utils.BYTE_FALSE, fmt.Errorf("[WithdrawONG] invoke ong contract, transferFrom(lockProxy, ontContract, toAddress, unboundOngAmount) err:%s", err)
 	}
 	if config.DefConfig.Common.EnableEventLog {

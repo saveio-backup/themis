@@ -22,10 +22,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/saveio/themis/crypto/keypair"
-	"github.com/saveio/themis/crypto/signature"
 	"github.com/saveio/themis/cmd/abi"
 	clisvrcom "github.com/saveio/themis/cmd/sigsvr/common"
+	"github.com/saveio/themis/crypto/keypair"
+	"github.com/saveio/themis/crypto/signature"
 	nutils "github.com/saveio/themis/smartcontract/service/native/utils"
 )
 
@@ -44,7 +44,7 @@ func TestSigNativeInvokeTx(t *testing.T) {
 	invokeReq := &SigNativeInvokeTxReq{
 		GasPrice: 0,
 		GasLimit: 40000,
-		Address:  nutils.OntContractAddress.ToHexString(),
+		Address:  nutils.UsdtContractAddress.ToHexString(),
 		Method:   "transfer",
 		Version:  0,
 		Params: []interface{}{

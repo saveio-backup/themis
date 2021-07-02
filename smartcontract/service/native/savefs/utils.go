@@ -20,8 +20,9 @@ package savefs
 
 import (
 	"fmt"
-	"github.com/saveio/themis/vm/wasmvm/util"
 	"io"
+
+	"github.com/saveio/themis/vm/wasmvm/util"
 
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/log"

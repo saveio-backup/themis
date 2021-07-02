@@ -21,6 +21,7 @@ package ledgerstore
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"hash"
@@ -31,10 +32,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/saveio/themis/crypto/keypair"
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/config"
 	"github.com/saveio/themis/common/log"
+	"github.com/saveio/themis/common/serialization"
 	vconfig "github.com/saveio/themis/consensus/vbft/config"
 	"github.com/saveio/themis/core/payload"
 	"github.com/saveio/themis/core/signature"
@@ -43,6 +44,7 @@ import (
 	scom "github.com/saveio/themis/core/store/common"
 	"github.com/saveio/themis/core/store/overlaydb"
 	"github.com/saveio/themis/core/types"
+	"github.com/saveio/themis/crypto/keypair"
 	"github.com/saveio/themis/errors"
 	"github.com/saveio/themis/events"
 	"github.com/saveio/themis/events/message"
@@ -272,6 +274,7 @@ func (this *LedgerStoreImp) loadCurrentBlock() error {
 	if err != nil {
 		return fmt.Errorf("LoadCurrentBlock error %s", err)
 	}
+	log.Infof("currentBlockHash %v", currentBlockHash)
 	log.Infof("InitCurrentBlock currentBlockHash %s currentBlockHeight %d", currentBlockHash.ToHexString(), currentBlockHeight)
 	this.currBlockHash = currentBlockHash
 	this.currBlockHeight = currentBlockHeight
@@ -1308,6 +1311,153 @@ func (this *LedgerStoreImp) PreExecuteContract(tx *types.Transaction) (*sstate.P
 	return this.PreExecuteContractWithParam(tx, param)
 }
 
+type EventInfo struct {
+	txHash common.Uint256
+	height uint32
+}
+
+func (this *LedgerStoreImp) GetEventNotifyByEventId(contractAddress common.Address, address common.Address, eventId uint32) ([]*event.ExecuteNotify, error) {
+	txHashes, err := this.eventStore.GetEventNotifyTxHashByEventID(contractAddress, address, eventId)
+	if err != nil {
+		return nil, err
+	}
+
+	//map from block height to txHash
+	infos := []*EventInfo{}
+
+	for _, txHash := range txHashes {
+		// no way to get the block height in the event store
+		_, height, err := this.GetTransaction(txHash)
+		if err != nil {
+			return nil, err
+		}
+
+		info := &EventInfo{txHash, height}
+		infos = append(infos, info)
+	}
+
+	// sort according to block height
+	sort.SliceStable(infos, func(i, j int) bool {
+		if infos[i].height < infos[j].height {
+			return true
+		}
+		// for txHashes who has the same block height, need to order correctly
+		return this.eventStore.GetEventNotifyOrderInBlock(infos[i].height, infos[i].txHash, infos[j].txHash)
+	})
+
+	evtNotifies := make([]*event.ExecuteNotify, 0)
+	for _, info := range infos {
+		evtNotify, err := this.GetEventNotifyByTx(info.txHash)
+		if err != nil {
+			log.Errorf("getEventNotifyByTx Height:%d by txhash:%s error:%s", info.height, info.txHash.ToHexString(), err)
+			continue
+		}
+		evtNotifies = append(evtNotifies, evtNotify)
+	}
+	return evtNotifies, nil
+}
+
+func (this *EventStore) GetEventNotifyOrderInBlock(height uint32, hash1 common.Uint256, hash2 common.Uint256) bool {
+	key, err := this.getEventNotifyByBlockKey(height)
+	if err != nil {
+		return false
+	}
+	data, err := this.store.Get(key)
+	if err != nil {
+		return false
+	}
+	reader := bytes.NewBuffer(data)
+	size, err := serialization.ReadUint32(reader)
+	if err != nil {
+		return false
+	}
+
+	count := 0
+	index1 := 0
+	index2 := 0
+	for i := 0; i < int(size); i++ {
+		var txHash common.Uint256
+		err = txHash.Deserialize(reader)
+		if err != nil {
+			return false
+		}
+
+		if txHash == hash1 {
+			count++
+			index1 = i
+		} else if txHash == hash2 {
+			count++
+			index2 = i
+		}
+
+		if count == 2 {
+			return index1 < index2
+		}
+	}
+	return false
+}
+
+func (this *LedgerStoreImp) GetEventNotifyByEventIdAndHeights(contractAddress common.Address, address []byte, eventId, startBlockHeight, endBlockHeight uint32) ([]*event.ExecuteNotify, error) {
+	txHashes, err := this.eventStore.GetEventNotifyTxHashByHeights(contractAddress, address, eventId)
+	if err != nil {
+		return nil, err
+	}
+
+	//map from block height to txHash
+	infos := []*EventInfo{}
+	txMap := make(map[common.Uint256]struct{}, 0)
+	for _, txHash := range txHashes {
+		// no way to get the block height in the event store
+		_, height, err := this.GetTransaction(txHash)
+		if err != nil {
+			return nil, err
+		}
+		if (startBlockHeight >= 0 && endBlockHeight > 0) && (height < startBlockHeight || height > endBlockHeight) {
+			continue
+		}
+
+		if _, ok := txMap[txHash]; ok {
+			continue
+		}
+
+		info := &EventInfo{txHash, height}
+		infos = append(infos, info)
+		txMap[txHash] = struct{}{}
+	}
+
+	// sort according to block height
+	sort.SliceStable(infos, func(i, j int) bool {
+		if infos[i].height < infos[j].height {
+			return true
+		}
+		// for txHashes who has the same block height, need to order correctly
+		return this.eventStore.GetEventNotifyOrderInBlock(infos[i].height, infos[i].txHash, infos[j].txHash)
+	})
+
+	evtNotifies := make([]*event.ExecuteNotify, 0)
+	for _, info := range infos {
+		evtNotify, err := this.GetEventNotifyByTx(info.txHash)
+		if err != nil {
+			log.Errorf("getEventNotifyByTx Height:%d by txhash:%s error:%s", info.height, info.txHash.ToHexString(), err)
+			continue
+		}
+		if eventId != 0 {
+			eventIdNoMatch := false
+			for _, notify := range evtNotify.Notify {
+				if notify.ContractAddress.ToBase58() == contractAddress.ToBase58() && notify.EventIdentifier != eventId {
+					eventIdNoMatch = true
+					break
+				}
+			}
+			if eventIdNoMatch {
+				continue
+			}
+		}
+		evtNotifies = append(evtNotifies, evtNotify)
+	}
+	return evtNotifies, nil
+}
+
 //Close ledger store.
 func (this *LedgerStoreImp) Close() error {
 	// wait block saving complete, and get the lock to avoid subsequent block saving
@@ -1360,4 +1510,11 @@ func (this *LedgerStoreImp) maxAllowedPruneHeight(currHeader *types.Header) uint
 		return 0
 	}
 	return lastReferHeight - 1
+}
+
+func (this *EventStore) getEventNotifyByBlockKey(height uint32) ([]byte, error) {
+	key := make([]byte, 5, 5)
+	key[0] = byte(scom.EVENT_NOTIFY)
+	binary.LittleEndian.PutUint32(key[1:], height)
+	return key, nil
 }

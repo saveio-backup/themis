@@ -463,7 +463,7 @@ func (this *PreConfig) Deserialization(source *common.ZeroCopySource) error {
 
 type GlobalParam struct {
 	CandidateFee uint64 //unit: 10^-9 ong
-	MinInitStake uint32 //min init pos
+	MinInitStake uint64 //min init pos
 	CandidateNum uint32 //num of candidate and consensus node
 	PosLimit     uint32 //authorize pos limit is initPos*posLimit
 	A            uint32 //fee split to all consensus node
@@ -538,7 +538,7 @@ func (this *GlobalParam) Deserialization(source *common.ZeroCopySource) error {
 		return fmt.Errorf("penalty larger than max of uint32")
 	}
 	this.CandidateFee = candidateFee
-	this.MinInitStake = uint32(minInitStake)
+	this.MinInitStake = uint64(minInitStake)
 	this.CandidateNum = uint32(candidateNum)
 	this.PosLimit = uint32(posLimit)
 	this.A = uint32(a)

@@ -133,6 +133,11 @@ var (
 		Usage: "P2P network port `<number>`",
 		Value: config.DEFAULT_NODE_PORT,
 	}
+	HttpInfoPortFlag = cli.UintFlag{
+		Name:  "httpinfo-port",
+		Usage: "The listening port of http server for viewing node information `<number>`",
+		Value: config.DEFAULT_HTTP_INFO_PORT,
+	}
 	DualPortSupportFlag = cli.BoolFlag{
 		Name:  "dual-port",
 		Usage: "Enable a dual network, P2P network for transaction messages and for consensus messages.",
@@ -391,6 +396,11 @@ var (
 		Name:  "gaslimit",
 		Usage: "Gas limit of the transaction",
 		Value: neovm.MIN_TRANSACTION_GAS,
+	}
+	ContractVmTypeFlag = cli.UintFlag{
+		Name:  "vmtype",
+		Usage: "The Contract type: 1 for Neovm ,3 for Wasmvm",
+		Value: 1,
 	}
 	TransactionPayerFlag = cli.StringFlag{
 		Name:  "payer",

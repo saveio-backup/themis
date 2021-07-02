@@ -37,7 +37,7 @@ import (
 	"github.com/saveio/themis/smartcontract/event"
 	"github.com/saveio/themis/smartcontract/service/native/global_params"
 	ninit "github.com/saveio/themis/smartcontract/service/native/init"
-	"github.com/saveio/themis/smartcontract/service/native/ont"
+	"github.com/saveio/themis/smartcontract/service/native/usdt"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 	"github.com/saveio/themis/smartcontract/service/neovm"
 	"github.com/saveio/themis/smartcontract/service/wasmvm"
@@ -293,7 +293,7 @@ func SaveNotify(eventStore scommon.EventStore, txHash common.Uint256, notify *ev
 }
 
 func genNativeTransferCode(from, to common.Address, value uint64) []byte {
-	transfer := &ont.Transfers{States: []ont.State{{From: from, To: to, Value: value}}}
+	transfer := &usdt.Transfers{States: []usdt.State{{From: from, To: to, Value: value}}}
 	return common.SerializeToBytes(transfer)
 }
 
@@ -322,7 +322,7 @@ func chargeCostGas(payer common.Address, gas uint64, config *smartcontract.Confi
 	}
 
 	service, _ := sc.NewNativeService()
-	_, err := service.NativeCall(utils.OngContractAddress, "transfer", params)
+	_, err := service.NativeCall(utils.UsdtContractAddress, "transfer", params)
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +378,7 @@ func getBalanceFromNative(config *smartcontract.Config, cache *storage.CacheDB, 
 	}
 
 	service, _ := sc.NewNativeService()
-	result, err := service.NativeCall(utils.OngContractAddress, ont.BALANCEOF_NAME, bf.Bytes())
+	result, err := service.NativeCall(utils.UsdtContractAddress, usdt.BALANCEOF_NAME, bf.Bytes())
 	if err != nil {
 		return 0, err
 	}

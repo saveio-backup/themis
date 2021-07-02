@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"io"
 
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/config"
@@ -34,6 +35,28 @@ import (
 	"github.com/saveio/themis/smartcontract/service/native/usdt"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
+
+type GasRevenue struct {
+	Total uint64
+}
+
+func (this *GasRevenue) Serialize(w io.Writer) error {
+	if err := serialization.WriteUint64(w, this.Total); err != nil {
+		return fmt.Errorf("serialization.WriteUint32, serialize view error: %v", err)
+	}
+
+	return nil
+}
+
+func (this *GasRevenue) Deserialize(r io.Reader) error {
+	total, err := serialization.ReadUint64(r)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadUint32, deserialize view error: %v", err)
+	}
+
+	this.Total = total
+	return nil
+}
 
 func GetPeerPoolMap(native *native.NativeService, contract common.Address, view uint32) (*PeerPoolMap, error) {
 	peerPoolMap := &PeerPoolMap{
@@ -639,14 +662,14 @@ func appCallInitContractAdmin(native *native.NativeService, adminOntID []byte) e
 	//skip ONTID logic
 	return nil
 
-	bf := new(bytes.Buffer)
-	params := &auth.InitContractAdminParam{
-		AdminOntID: adminOntID,
-	}
-	if _, err := native.NativeCall(utils.AuthContractAddress, "initContractAdmin", common.SerializeToBytes(params)); err != nil {
-		return fmt.Errorf("appCallInitContractAdmin, appCall error: %v", err)
-	}
-	return nil
+	// bf := new(bytes.Buffer)
+	// params := &auth.InitContractAdminParam{
+	// 	AdminOntID: adminOntID,
+	// }
+	// if _, err := native.NativeCall(utils.AuthContractAddress, "initContractAdmin", common.SerializeToBytes(params)); err != nil {
+	// 	return fmt.Errorf("appCallInitContractAdmin, appCall error: %v", err)
+	// }
+	// return nil
 }
 
 func appCallVerifyToken(native *native.NativeService, contract common.Address, caller []byte, fn string, keyNo uint64) error {
@@ -765,4 +788,16 @@ func putGasAddress(native *native.NativeService, contract common.Address, gasAdd
 	native.CacheDB.Put(utils.ConcatKey(contract, []byte(GAS_ADDRESS)),
 		cstates.GenRawStorageItem(common.SerializeToBytes(gasAddress)))
 	return nil
+}
+
+func getUsdtBalance(native *native.NativeService, address common.Address) (uint64, error) {
+	sink := common.ZeroCopySink{}
+	utils.EncodeAddress(&sink, address)
+
+	value, err := native.NativeCall(utils.UsdtContractAddress, "balanceOf", sink.Bytes())
+	if err != nil {
+		return 0, fmt.Errorf("getOngBalance, appCall error: %v", err)
+	}
+	balance := common.BigIntFromNeoBytes(value).Uint64()
+	return balance, nil
 }

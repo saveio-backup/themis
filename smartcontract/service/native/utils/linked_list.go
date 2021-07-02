@@ -289,3 +289,21 @@ func LinkedlistGetNumOfItems(native *native.NativeService, index []byte) (int, e
 	}
 	return n, nil
 }
+
+func LinkedlistDeleteAll(native *native.NativeService, index []byte) error {
+	head, err := getListHead(native, index)
+	if err != nil {
+		return err
+	}
+	q := head
+	for q != nil {
+		qnode, err := getListNode(native, index, q)
+		if err != nil {
+			return err
+		}
+		native.CacheDB.Delete(append(index, q...))
+		q = qnode.next
+	}
+	native.CacheDB.Delete(index)
+	return nil
+}

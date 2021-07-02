@@ -23,14 +23,11 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
 	"github.com/saveio/themis/common"
-	"github.com/saveio/themis/common/constants"
 	"github.com/saveio/themis/common/log"
-	"github.com/saveio/themis/core/ledger"
 	"github.com/saveio/themis/core/payload"
 	"github.com/saveio/themis/core/types"
 	cutils "github.com/saveio/themis/core/utils"
@@ -39,7 +36,6 @@ import (
 	bactor "github.com/saveio/themis/http/base/actor"
 	common2 "github.com/saveio/themis/p2pserver/common"
 	"github.com/saveio/themis/smartcontract/event"
-	"github.com/saveio/themis/smartcontract/service/native/ont"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 	cstate "github.com/saveio/themis/smartcontract/states"
 	"github.com/saveio/themis/vm/neovm"
@@ -49,8 +45,7 @@ const MAX_SEARCH_HEIGHT uint32 = 100
 const MAX_REQUEST_BODY_SIZE = 1 << 20
 
 type BalanceOfRsp struct {
-	Ont    string `json:"ont"`
-	Ong    string `json:"ong"`
+	Usdt   string `json:"usdt"`
 	Height string `json:"height"`
 }
 
@@ -196,6 +191,19 @@ func GetExecuteNotify(obj *event.ExecuteNotify) (map[string]bool, ExecuteNotify)
 	return contractAddrs, ExecuteNotify{txhash, obj.State, obj.GasConsumed, evts}
 }
 
+func GetEventForContract(obj *event.ExecuteNotify, address common.Address) []interface{} {
+	evts := []interface{}{}
+
+	for _, v := range obj.Notify {
+		if !bytes.Equal(v.ContractAddress[:], address[:]) {
+			continue
+		}
+		evts = append(evts, v.States)
+	}
+
+	return evts
+}
+
 func ConvertPreExecuteResult(obj *cstate.PreExecResult) PreExecuteResult {
 	evts := []NotifyEventInfo{}
 	for _, v := range obj.Notify {
@@ -309,25 +317,6 @@ func GetBalance(address common.Address) (*BalanceOfRsp, error) {
 		Usdt:   fmt.Sprintf("%d", balances[0]),
 		Height: fmt.Sprintf("%d", height),
 	}, nil
-}
-
-func GetGrantOng(addr common.Address) (string, error) {
-	key := append([]byte(ont.UNBOUND_TIME_OFFSET), addr[:]...)
-	value, err := ledger.DefLedger.GetStorageItem(utils.OntContractAddress, key)
-	if err != nil {
-		value = []byte{0, 0, 0, 0}
-	}
-	source := common.NewZeroCopySource(value)
-	v, eof := source.NextUint32()
-	if eof {
-		return fmt.Sprintf("%v", 0), io.ErrUnexpectedEOF
-	}
-	onts, _, err := GetContractBalance(0, []common.Address{utils.OntContractAddress}, addr, false)
-	if err != nil {
-		return fmt.Sprintf("%v", 0), err
-	}
-	boundong := utils.CalcUnbindOng(onts[0], v, uint32(time.Now().Unix())-constants.GENESIS_BLOCK_TIMESTAMP)
-	return fmt.Sprintf("%v", boundong), nil
 }
 
 func GetAllowance(asset string, from, to common.Address) (string, error) {

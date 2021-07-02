@@ -95,10 +95,8 @@ func (this *EventStore) SaveEventNofityByEventID(txHash common.Uint256, notify *
 			}
 			// use random to distinguish events with same event id
 			random := rand.Uint32()
-			key, err := this.getEventNotifyByEventIDKey(notifyInfo.ContractAddress, address, notifyInfo.EventIdentifier, random)
-			if err != nil {
-				return err
-			}
+			key := this.getEventNotifyByEventIDKey(notifyInfo.ContractAddress, address, notifyInfo.EventIdentifier, random)
+
 			value := bytes.NewBuffer(nil)
 			txHash.Serialize(value)
 
@@ -109,45 +107,29 @@ func (this *EventStore) SaveEventNofityByEventID(txHash common.Uint256, notify *
 	return nil
 }
 
-func (this *EventStore) getEventNotifyByEventIDKey(contractAddress common.Address, address common.Address, eventId uint32, random uint32) ([]byte, error) {
-	prefix, err := this.getEventNotifyByEventIDKeyPrefix(contractAddress, address, eventId)
-	if err != nil {
-		return nil, err
-	}
-
-	key := bytes.NewBuffer(prefix)
-	serialization.WriteUint32(key, random)
-
-	return key.Bytes(), nil
+func (this *EventStore) getEventNotifyByEventIDKey(contractAddress common.Address, address common.Address, eventId uint32, random uint32) []byte {
+	prefix := this.getEventNotifyByEventIDKeyPrefix(contractAddress, address, eventId)
+	sink := common.ZeroCopySink{}
+	sink.WriteBytes(prefix)
+	sink.WriteUint32(random)
+	return sink.Bytes()
 }
 
-func (this *EventStore) getEventNotifyByEventIDKeyPrefix(contractAddress common.Address, address common.Address, eventId uint32) ([]byte, error) {
-	key := bytes.NewBuffer(nil)
-	err := contractAddress.Serialize(key)
-	if err != nil {
-		return nil, err
-	}
-
-	err = address.Serialize(key)
-	if err != nil {
-		return nil, err
-	}
-
+func (this *EventStore) getEventNotifyByEventIDKeyPrefix(contractAddress common.Address, address common.Address, eventId uint32) []byte {
+	sink := common.ZeroCopySink{}
+	contractAddress.Serialization(&sink)
+	address.Serialization(&sink)
 	// eventId 0 means find all the events
 	if eventId != 0 {
-		serialization.WriteUint32(key, eventId)
+		sink.WriteUint32(eventId)
 	}
-
-	return key.Bytes(), nil
+	return sink.Bytes()
 }
 
-func (this *EventStore) getAllEventNotifyKeyPrefix(contractAddress common.Address) ([]byte, error) {
-	key := bytes.NewBuffer(nil)
-	err := contractAddress.Serialize(key)
-	if err != nil {
-		return nil, err
-	}
-	return key.Bytes(), nil
+func (this *EventStore) getAllEventNotifyKeyPrefix(contractAddress common.Address) []byte {
+	sink := common.ZeroCopySink{}
+	contractAddress.Serialization(&sink)
+	return sink.Bytes()
 }
 
 func (this *EventStore) GetEventNotifyTxHashByHeights(contractAddress common.Address, addressBytes []byte, eventId uint32) ([]common.Uint256, error) {
@@ -155,19 +137,12 @@ func (this *EventStore) GetEventNotifyTxHashByHeights(contractAddress common.Add
 
 	var prefix []byte
 	if addressBytes != nil {
-		var err error
 		var address common.Address
 		copy(address[:], addressBytes[:])
-		prefix, err = this.getEventNotifyByEventIDKeyPrefix(contractAddress, address, eventId)
-		if err != nil {
-			return nil, err
-		}
+		prefix = this.getEventNotifyByEventIDKeyPrefix(contractAddress, address, eventId)
+
 	} else {
-		var err error
-		prefix, err = this.getAllEventNotifyKeyPrefix(contractAddress)
-		if err != nil {
-			return nil, err
-		}
+		prefix = this.getAllEventNotifyKeyPrefix(contractAddress)
 	}
 
 	iter := this.store.NewIterator(prefix)
@@ -195,10 +170,7 @@ func (this *EventStore) GetEventNotifyTxHashByHeights(contractAddress common.Add
 func (this *EventStore) GetEventNotifyTxHashByEventID(contractAddress common.Address, address common.Address, eventId uint32) ([]common.Uint256, error) {
 	var txHashes []common.Uint256
 
-	prefix, err := this.getEventNotifyByEventIDKeyPrefix(contractAddress, address, eventId)
-	if err != nil {
-		return nil, err
-	}
+	prefix := this.getEventNotifyByEventIDKeyPrefix(contractAddress, address, eventId)
 
 	iter := this.store.NewIterator(prefix)
 

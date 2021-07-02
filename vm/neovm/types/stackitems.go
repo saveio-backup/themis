@@ -18,6 +18,12 @@
 
 package types
 
+import (
+	"math/big"
+
+	"github.com/saveio/themis/vm/neovm/interfaces"
+)
+
 const (
 	ByteArrayType byte = 0x00
 	BooleanType   byte = 0x01
@@ -27,3 +33,15 @@ const (
 	StructType    byte = 0x81
 	MapType       byte = 0x82
 )
+
+type StackItems interface {
+	Equals(other StackItems) bool
+	GetBigInteger() (*big.Int, error)
+	GetBoolean() (bool, error)
+	GetByteArray() ([]byte, error)
+	GetInterface() (interfaces.Interop, error)
+	GetArray() ([]StackItems, error)
+	GetStruct() ([]StackItems, error)
+	GetMap() (map[StackItems]StackItems, error)
+	IsMapKey() bool
+}

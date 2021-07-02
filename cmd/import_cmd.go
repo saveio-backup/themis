@@ -56,9 +56,9 @@ var ImportCommand = cli.Command{
 func importBlocks(ctx *cli.Context) error {
 	log.InitLog(log.InfoLog)
 
-	cfg, err := SetOntologyConfig(ctx)
+	cfg, err := SetThemisConfig(ctx)
 	if err != nil {
-		PrintErrorMsg("SetOntologyConfig error:%s", err)
+		PrintErrorMsg("SetThemisConfig error:%s", err)
 		cli.ShowSubcommandHelp(ctx)
 		return nil
 	}

@@ -685,47 +685,6 @@ func GetGasPrice(params []interface{}) map[string]interface{} {
 	return responseSuccess(result)
 }
 
-// get unbound ong of address
-func GetUnboundOng(params []interface{}) map[string]interface{} {
-	if len(params) < 1 {
-		return responsePack(berr.INVALID_PARAMS, "")
-	}
-	str, ok := params[0].(string)
-	if !ok {
-		return responsePack(berr.INVALID_PARAMS, "")
-	}
-	toAddr, err := common.AddressFromBase58(str)
-	if err != nil {
-		return responsePack(berr.INVALID_PARAMS, "")
-	}
-	fromAddr := utils.OntContractAddress
-	rsp, err := bcomn.GetAllowance("ong", fromAddr, toAddr)
-	if err != nil {
-		return responsePack(berr.INVALID_PARAMS, "")
-	}
-	return responseSuccess(rsp)
-}
-
-// get grant ong of address
-func GetGrantOng(params []interface{}) map[string]interface{} {
-	if len(params) < 1 {
-		return responsePack(berr.INVALID_PARAMS, "")
-	}
-	str, ok := params[0].(string)
-	if !ok {
-		return responsePack(berr.INVALID_PARAMS, "")
-	}
-	toAddr, err := common.AddressFromBase58(str)
-	if err != nil {
-		return responsePack(berr.INVALID_PARAMS, "")
-	}
-	rsp, err := bcomn.GetGrantOng(toAddr)
-	if err != nil {
-		return responsePack(berr.INTERNAL_ERROR, "")
-	}
-	return responseSuccess(rsp)
-}
-
 //get cross chain message by height
 func GetCrossChainMsg(params []interface{}) map[string]interface{} {
 	if len(params) < 1 {

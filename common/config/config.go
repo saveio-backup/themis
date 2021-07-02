@@ -47,7 +47,7 @@ const (
 	DEFAULT_CONFIG_FILE_NAME = "./config.json"
 	DEFAULT_WALLET_FILE_NAME = "./wallet.dat"
 	MIN_GEN_BLOCK_TIME       = 2
-	DEFAULT_GEN_BLOCK_TIME   = 6
+	DEFAULT_GEN_BLOCK_TIME   = 5
 	DBFT_MIN_NODE_NUM        = 4 //min node number of dbft consensus
 	SOLO_MIN_NODE_NUM        = 1 //min node number of solo consensus
 	VBFT_MIN_NODE_NUM        = 4 //min node number of vbft consensus
@@ -62,6 +62,7 @@ const (
 	DEFAULT_CONSENSUS_PORT                  = uint(20339)
 	DEFAULT_RPC_PORT                        = uint(20336)
 	DEFAULT_RPC_LOCAL_PORT                  = uint(20337)
+	DEFAULT_GRAPHQL_PORT                    = uint(20333)
 	DEFAULT_REST_PORT                       = uint(20334)
 	DEFAULT_WS_PORT                         = uint(20335)
 	DEFAULT_MAX_CONN_IN_BOUND               = uint(1024)
@@ -78,6 +79,8 @@ const (
 	DEFAULT_GAS_PRICE                       = 500
 	DEFAULT_WASM_GAS_FACTOR                 = uint64(10)
 	DEFAULT_WASM_MAX_STEPCOUNT              = uint64(8000000)
+
+	DEFAULT_HTTP_MAX_CONN = 1024
 
 	DEFAULT_DATA_DIR      = "./Chain/"
 	DEFAULT_RESERVED_FILE = "./peers.rsv"
@@ -200,14 +203,7 @@ func GetCrossChainHeight() uint32 {
 }
 
 func GetOntHolderUnboundDeadline() uint32 {
-	switch DefConfig.P2PNode.NetworkId {
-	case NETWORK_ID_MAIN_NET:
-		return constants.CHANGE_UNBOUND_TIMESTAMP_MAINNET - constants.GENESIS_BLOCK_TIMESTAMP
-	case NETWORK_ID_POLARIS_NET:
-		return constants.CHANGE_UNBOUND_TIMESTAMP_POLARIS - constants.GENESIS_BLOCK_TIMESTAMP
-	default:
-		return 0
-	}
+	return 0
 }
 
 func GetNewPeerCostHeight() uint32 {
@@ -223,28 +219,7 @@ func GetNewPeerCostHeight() uint32 {
 
 // the end of unbound timestamp offset from genesis block's timestamp
 func GetGovUnboundDeadline() (uint32, uint64) {
-	count := uint64(0)
-	index := int(GetOntHolderUnboundDeadline() / constants.UNBOUND_TIME_INTERVAL)
-	for i := 0; i < index; i++ {
-		count += constants.UNBOUND_GENERATION_AMOUNT[i] * uint64(constants.UNBOUND_TIME_INTERVAL)
-	}
-	gap := uint64(GetOntHolderUnboundDeadline()) - uint64(index)*uint64(constants.UNBOUND_TIME_INTERVAL)
-	count += constants.UNBOUND_GENERATION_AMOUNT[index]*gap +
-		constants.NEW_UNBOUND_GENERATION_AMOUNT[index]*(uint64(constants.UNBOUND_TIME_INTERVAL)-gap)
-
-	for i := index + 1; i < len(constants.NEW_UNBOUND_GENERATION_AMOUNT); i++ {
-		count += constants.NEW_UNBOUND_GENERATION_AMOUNT[i] * uint64(constants.UNBOUND_TIME_INTERVAL)
-	}
-
-	numInterval := len(constants.NEW_UNBOUND_GENERATION_AMOUNT)
-
-	if constants.NEW_UNBOUND_GENERATION_AMOUNT[numInterval-1] != 3 ||
-		!(count-3*uint64(constants.UNBOUND_TIME_INTERVAL) < constants.ONT_TOTAL_SUPPLY && constants.ONT_TOTAL_SUPPLY <= count) {
-		panic("incompatible constants setting")
-	}
-
-	return constants.UNBOUND_TIME_INTERVAL*uint32(numInterval) - uint32(count-uint64(constants.ONT_TOTAL_SUPPLY))/3 - 1,
-		uint64(3 - (count-uint64(constants.ONT_TOTAL_SUPPLY))%3)
+	return 0, 0
 }
 
 func GetNetworkName(id uint32) string {
@@ -387,7 +362,7 @@ var MainNetConfig = &GenesisConfig{
 	SOLO: &SOLOConfig{},
 }
 
-var DefConfig = NewOntologyConfig()
+var DefConfig = NewThemisConfig()
 
 type GenesisConfig struct {
 	SeedList      []string
@@ -435,7 +410,7 @@ func (self *VBFTConfig) Serialization(sink *common.ZeroCopySink) error {
 	sink.WriteUint32(self.HashMsgDelay)
 	sink.WriteUint32(self.PeerHandshakeTimeout)
 	sink.WriteUint32(self.MaxBlockChangeView)
-	sink.WriteUint32(self.MinInitStake)
+	sink.WriteUint64(self.MinInitStake)
 	sink.WriteString(self.AdminOntID)
 	sink.WriteString(self.VrfValue)
 	sink.WriteString(self.VrfProof)
@@ -482,7 +457,7 @@ func (this *VBFTConfig) Deserialization(source *common.ZeroCopySource) error {
 	if eof {
 		return errors.NewDetailErr(io.ErrUnexpectedEOF, errors.ErrNoCode, "serialization.ReadUint32, deserialize maxBlockChangeView error!")
 	}
-	minInitStake, eof := source.NextUint32()
+	minInitStake, eof := source.NextUint64()
 	if eof {
 		return errors.NewDetailErr(io.ErrUnexpectedEOF, errors.ErrNoCode, "serialization.ReadUint32, deserialize minInitStake error!")
 	}
@@ -665,7 +640,7 @@ type WebSocketConfig struct {
 	HttpKeyPath  string
 }
 
-type OntologyConfig struct {
+type ThemisConfig struct {
 	Genesis   *GenesisConfig
 	Common    *CommonConfig
 	Consensus *ConsensusConfig
@@ -676,8 +651,8 @@ type OntologyConfig struct {
 	Ws        *WebSocketConfig
 }
 
-func NewOntologyConfig() *OntologyConfig {
-	return &OntologyConfig{
+func NewThemisConfig() *ThemisConfig {
+	return &ThemisConfig{
 		Genesis: MainNetConfig,
 		Common: &CommonConfig{
 			LogLevel:         DEFAULT_LOG_LEVEL,
@@ -704,7 +679,7 @@ func NewOntologyConfig() *OntologyConfig {
 			CertPath:                  "",
 			KeyPath:                   "",
 			CAPath:                    "",
-			HttpInfoPort:              DEFAULT_HTTP_INFO_PORT,
+			HttpInfoPort:              uint16(DEFAULT_HTTP_INFO_PORT),
 			MaxHdrSyncReqs:            DEFAULT_MAX_SYNC_HEADER,
 			MaxConnInBound:            DEFAULT_MAX_CONN_IN_BOUND,
 			MaxConnOutBound:           DEFAULT_MAX_CONN_OUT_BOUND,
@@ -730,7 +705,7 @@ func NewOntologyConfig() *OntologyConfig {
 	}
 }
 
-func (this *OntologyConfig) GetBookkeepers() ([]keypair.PublicKey, error) {
+func (this *ThemisConfig) GetBookkeepers() ([]keypair.PublicKey, error) {
 	var bookKeepers []string
 	switch this.Genesis.ConsensusType {
 	case CONSENSUS_TYPE_VBFT:
@@ -761,7 +736,7 @@ func (this *OntologyConfig) GetBookkeepers() ([]keypair.PublicKey, error) {
 	return pubKeys, nil
 }
 
-func (this *OntologyConfig) GetDefaultNetworkId() (uint32, error) {
+func (this *ThemisConfig) GetDefaultNetworkId() (uint32, error) {
 	defaultNetworkId, err := this.getDefNetworkIDFromGenesisConfig(this.Genesis)
 	if err != nil {
 		return 0, err
@@ -783,7 +758,7 @@ func (this *OntologyConfig) GetDefaultNetworkId() (uint32, error) {
 	return defaultNetworkId, nil
 }
 
-func (this *OntologyConfig) getDefNetworkIDFromGenesisConfig(genCfg *GenesisConfig) (uint32, error) {
+func (this *ThemisConfig) getDefNetworkIDFromGenesisConfig(genCfg *GenesisConfig) (uint32, error) {
 	var configData []byte
 	var err error
 	switch this.Genesis.ConsensusType {

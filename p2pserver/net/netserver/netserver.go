@@ -41,14 +41,14 @@ func NewNetServer(protocol p2p.Protocol, conf *config.P2PNodeConfig, reserveAddr
 
 	keyId := common.RandPeerKeyId()
 	info := peer.NewPeerInfo(keyId.Id, common.PROTOCOL_VERSION, common.SERVICE_NODE, true,
-		conf.HttpInfoPort, nodePort, 0, config.Version, "")
+		conf.HttpInfoPort, uint16(nodePort), 0, config.Version, "")
 
 	option, err := connect_controller.ConnCtrlOptionFromConfig(conf, reserveAddrFilter)
 	if err != nil {
 		return nil, err
 	}
 
-	listener, err := connect_controller.NewListener(nodePort, conf)
+	listener, err := connect_controller.NewListener(uint16(nodePort), conf)
 	if err != nil {
 		log.Error("[p2p]failed to create sync listener")
 		return nil, errors.New("[p2p]failed to create sync listener")

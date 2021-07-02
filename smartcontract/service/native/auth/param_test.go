@@ -37,7 +37,7 @@ var (
 var (
 	funcs           = []string{"foo1", "foo2"}
 	role            = "role"
-	OntContractAddr = utils.OntContractAddress
+	OntContractAddr = utils.UsdtContractAddress
 )
 
 func init() {

@@ -27,6 +27,7 @@ import (
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/config"
 	"github.com/saveio/themis/common/constants"
+	"github.com/saveio/themis/common/log"
 	vconfig "github.com/saveio/themis/consensus/vbft/config"
 	"github.com/saveio/themis/core/payload"
 	"github.com/saveio/themis/core/types"
@@ -35,7 +36,7 @@ import (
 	"github.com/saveio/themis/smartcontract/service/native/dns"
 	"github.com/saveio/themis/smartcontract/service/native/global_params"
 	"github.com/saveio/themis/smartcontract/service/native/governance"
-	"github.com/saveio/themis/smartcontract/service/native/ont"
+	"github.com/saveio/themis/smartcontract/service/native/usdt"
 	nutils "github.com/saveio/themis/smartcontract/service/native/utils"
 	"github.com/saveio/themis/smartcontract/service/neovm"
 )
@@ -115,6 +116,8 @@ func BuildGenesisBlock(defaultBookkeeper []keypair.PublicKey, genesisConfig *con
 		},
 	}
 	genesisBlock.RebuildMerkleRoot()
+	genesisHash := genesisBlock.Hash()
+	log.Infof("build genesis block %s", genesisHash.ToHexString())
 	return genesisBlock, nil
 }
 
@@ -203,6 +206,7 @@ func newGoverningInit() *types.Transaction {
 		addr  common.Address
 		value uint64
 	}{{addr, constants.USDT_TOTAL_SUPPLY}}
+	log.Infof("distribute %v to %v", constants.USDT_TOTAL_SUPPLY, addr)
 
 	args := common.NewZeroCopySink(nil)
 	nutils.EncodeVarUint(args, uint64(len(distribute)))
@@ -211,7 +215,7 @@ func newGoverningInit() *types.Transaction {
 		nutils.EncodeVarUint(args, part.value)
 	}
 
-	mutable := utils.BuildNativeTransaction(nutils.OntContractAddress, ont.INIT_NAME, args.Bytes())
+	mutable := utils.BuildNativeTransaction(nutils.UsdtContractAddress, usdt.INIT_NAME, args.Bytes())
 	tx, err := mutable.IntoImmutable()
 	if err != nil {
 		panic("construct genesis governing token transaction error ")

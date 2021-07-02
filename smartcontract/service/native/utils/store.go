@@ -21,6 +21,7 @@ package utils
 import (
 	"bytes"
 
+	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/serialization"
 	cstates "github.com/saveio/themis/core/states"
 	"github.com/saveio/themis/errors"
@@ -36,7 +37,7 @@ func GetStorageItem(native *native.NativeService, key []byte) (*cstates.StorageI
 		return nil, nil
 	}
 	item := new(cstates.StorageItem)
-	err = item.Deserialize(bytes.NewBuffer(store))
+	err = item.Deserialization(common.NewZeroCopySource(store))
 	if err != nil {
 		return nil, errors.NewDetailErr(err, errors.ErrNoCode, "[GetStorageItem] instance doesn't StorageItem!")
 	}
@@ -91,4 +92,25 @@ func PutBytes(native *native.NativeService, key []byte, value []byte) {
 
 func DelStorageItem(native *native.NativeService, key []byte) {
 	native.CacheDB.Delete(key)
+}
+
+func GetStorageVarBytes(native *native.NativeService, key []byte) ([]byte, error) {
+	item, err := GetStorageItem(native, key)
+	if err != nil {
+		return []byte{}, err
+	}
+	if item == nil {
+		return []byte{}, nil
+	}
+	v, err := serialization.ReadVarBytes(bytes.NewBuffer(item.Value))
+	if err != nil {
+		return []byte{}, err
+	}
+	return v, nil
+}
+
+func GenVarBytesStorageItem(value []byte) *cstates.StorageItem {
+	bf := new(bytes.Buffer)
+	serialization.WriteVarBytes(bf, value)
+	return &cstates.StorageItem{Value: bf.Bytes()}
 }

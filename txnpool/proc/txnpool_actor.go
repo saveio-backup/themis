@@ -62,7 +62,7 @@ func NewVerifyRspActor(s *TXPoolServer) *VerifyRspActor {
 
 // isBalanceEnough checks if the tranactor has enough to cover gas cost
 func isBalanceEnough(address common.Address, gas uint64) bool {
-	balance, _, err := hComm.GetContractBalance(0, []common.Address{utils.OngContractAddress}, address, false)
+	balance, _, err := hComm.GetContractBalance(0, []common.Address{utils.UsdtContractAddress}, address, false)
 	if err != nil {
 		log.Debugf("failed to get contract balance %s err %v",
 			address.ToHexString(), err)
@@ -107,9 +107,9 @@ func preExecCheck(txn *tx.Transaction) (bool, string) {
 	}
 	if !isBalanceEnough(txn.Payer, gas) {
 		log.Debugf("preExecCheck: transactor %s has no balance enough to cover gas cost %d",
-			txn.Payer.ToHexString(), gas)
+			txn.Payer, gas)
 		return false, fmt.Sprintf("transactor %s has no balance enough to cover gas cost %d",
-			txn.Payer.ToHexString(), gas)
+			txn.Payer, gas)
 	}
 	return true, ""
 }

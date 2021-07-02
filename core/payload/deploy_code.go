@@ -23,6 +23,7 @@ import (
 	"io"
 
 	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/common/serialization"
 	"github.com/saveio/themis/errors"
 )
 
@@ -201,6 +202,87 @@ func (dc *DeployCode) Deserialization(source *common.ZeroCopySource) error {
 	err := validateDeployCode(dc)
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (dc *DeployCode) Serialize(w io.Writer) error {
+	var err error
+
+	err = serialization.WriteVarBytes(w, dc.code)
+	if err != nil {
+		return fmt.Errorf("DeployCode Code Serialize failed: %s", err)
+	}
+
+	err = serialization.WriteByte(w, dc.vmFlags)
+	if err != nil {
+		return fmt.Errorf("DeployCode vmFlags Serialize failed: %s", err)
+	}
+
+	err = serialization.WriteString(w, dc.Name)
+	if err != nil {
+		return fmt.Errorf("DeployCode Name Serialize failed: %s", err)
+	}
+
+	err = serialization.WriteString(w, dc.Version)
+	if err != nil {
+		return fmt.Errorf("DeployCode Version Serialize failed: %s", err)
+	}
+
+	err = serialization.WriteString(w, dc.Author)
+	if err != nil {
+		return fmt.Errorf("DeployCode Author Serialize failed: %s", err)
+	}
+
+	err = serialization.WriteString(w, dc.Email)
+	if err != nil {
+		return fmt.Errorf("DeployCode Email Serialize failed: %s", err)
+	}
+
+	err = serialization.WriteString(w, dc.Description)
+	if err != nil {
+		return fmt.Errorf("DeployCode Description Serialize failed: %s", err)
+	}
+
+	return nil
+}
+
+func (dc *DeployCode) Deserialize(r io.Reader) error {
+	code, err := serialization.ReadVarBytes(r)
+	if err != nil {
+		return fmt.Errorf("DeployCode Code Deserialize failed: %s", err)
+	}
+	dc.code = code
+
+	dc.vmFlags, err = serialization.ReadByte(r)
+	if err != nil {
+		return fmt.Errorf("DeployCode vmFlags Deserialize failed: %s", err)
+	}
+
+	dc.Name, err = serialization.ReadString(r)
+	if err != nil {
+		return fmt.Errorf("DeployCode Name Deserialize failed: %s", err)
+	}
+
+	dc.Version, err = serialization.ReadString(r)
+	if err != nil {
+		return fmt.Errorf("DeployCode CodeVersion Deserialize failed: %s", err)
+	}
+
+	dc.Author, err = serialization.ReadString(r)
+	if err != nil {
+		return fmt.Errorf("DeployCode Author Deserialize failed: %s", err)
+	}
+
+	dc.Email, err = serialization.ReadString(r)
+	if err != nil {
+		return fmt.Errorf("DeployCode Email Deserialize failed: %s", err)
+	}
+
+	dc.Description, err = serialization.ReadString(r)
+	if err != nil {
+		return fmt.Errorf("DeployCode Description Deserialize failed: %s", err)
 	}
 
 	return nil

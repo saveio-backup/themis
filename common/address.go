@@ -55,6 +55,21 @@ func (self *Address) Deserialization(source *ZeroCopySource) error {
 	return nil
 }
 
+// Serialize serialize Address into io.Writer
+func (self *Address) Serialize(w io.Writer) error {
+	_, err := w.Write(self[:])
+	return err
+}
+
+// Deserialize deserialize Address from io.Reader
+func (self *Address) Deserialize(r io.Reader) error {
+	_, err := io.ReadFull(r, self[:])
+	if err != nil {
+		return errors.New("deserialize Address error")
+	}
+	return nil
+}
+
 // ToBase58 returns base58 encoded address string
 func (f *Address) ToBase58() string {
 	data := append([]byte{23}, f[:]...)

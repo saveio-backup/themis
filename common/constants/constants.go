@@ -18,14 +18,10 @@
 
 package constants
 
-import (
-	"time"
-)
-
 // genesis constants
 var (
 	//TODO: modify this when on mainnet
-	GENESIS_BLOCK_TIMESTAMP = uint32(time.Date(2018, time.June, 30, 0, 0, 0, 0, time.UTC).Unix())
+	GENESIS_BLOCK_TIMESTAMP = uint32(1530316800)
 )
 
 // usdt constants

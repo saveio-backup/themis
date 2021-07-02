@@ -23,8 +23,7 @@ import (
 	"github.com/saveio/themis/common/constants"
 	"github.com/saveio/themis/smartcontract/service/native"
 	_ "github.com/saveio/themis/smartcontract/service/native/init"
-	"github.com/saveio/themis/smartcontract/service/native/ong"
-	"github.com/saveio/themis/smartcontract/service/native/ont"
+	"github.com/saveio/themis/smartcontract/service/native/usdt"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 	"github.com/saveio/themis/smartcontract/storage"
 	"github.com/stretchr/testify/assert"
@@ -33,7 +32,7 @@ import (
 )
 
 func setOntBalance(db *storage.CacheDB, addr common.Address, value uint64) {
-	balanceKey := ont.GenBalanceKey(utils.OntContractAddress, addr)
+	balanceKey := usdt.GenBalanceKey(utils.UsdtContractAddress, addr)
 	item := utils.GenUInt64StorageItem(value)
 	db.Put(balanceKey, item.ToArray())
 }
@@ -42,43 +41,16 @@ func ontBalanceOf(native *native.NativeService, addr common.Address) int {
 	sink := common.NewZeroCopySink(nil)
 	utils.EncodeAddress(sink, addr)
 	native.Input = sink.Bytes()
-	buf, _ := ont.OntBalanceOf(native)
+	buf, _ := usdt.UsdtBalanceOf(native)
 	val := common.BigIntFromNeoBytes(buf)
 	return int(val.Uint64())
-}
-
-func setOngBalance(db *storage.CacheDB, addr common.Address, value uint64) {
-	balanceKey := ont.GenBalanceKey(utils.OngContractAddress, addr)
-	item := utils.GenUInt64StorageItem(value)
-	db.Put(balanceKey, item.ToArray())
-}
-
-func ongBalanceOf(native *native.NativeService, addr common.Address) uint64 {
-	native.ContextRef.CurrentContext().ContractAddress = utils.OngContractAddress
-	sink := common.NewZeroCopySink(nil)
-	utils.EncodeAddress(sink, addr)
-	native.Input = sink.Bytes()
-	buf, _ := ong.OngBalanceOf(native)
-	val := common.BigIntFromNeoBytes(buf)
-	return val.Uint64()
-}
-
-func ongAllowance(native *native.NativeService, from, to common.Address) uint64 {
-	native.ContextRef.CurrentContext().ContractAddress = utils.OngContractAddress
-	sink := common.NewZeroCopySink(nil)
-	utils.EncodeAddress(sink, from)
-	utils.EncodeAddress(sink, to)
-	native.Input = sink.Bytes()
-	buf, _ := ong.OngAllowance(native)
-	val := common.BigIntFromNeoBytes(buf)
-	return val.Uint64()
 }
 
 func ontTotalAllowance(native *native.NativeService, addr common.Address) int {
 	sink := common.NewZeroCopySink(nil)
 	utils.EncodeAddress(sink, addr)
 	native.Input = sink.Bytes()
-	buf, _ := ont.TotalAllowance(native)
+	buf, _ := usdt.UsdtAllowance(native)
 	val := common.BigIntFromNeoBytes(buf)
 	return int(val.Uint64())
 }
@@ -86,34 +58,28 @@ func ontTotalAllowance(native *native.NativeService, addr common.Address) int {
 func ontTransfer(native *native.NativeService, from, to common.Address, value uint64) error {
 	native.Tx.SignedAddr = append(native.Tx.SignedAddr, from)
 
-	state := ont.State{from, to, value}
-	native.Input = common.SerializeToBytes(&ont.Transfers{States: []ont.State{state}})
+	state := usdt.State{from, to, value}
+	native.Input = common.SerializeToBytes(&usdt.Transfers{States: []usdt.State{state}})
 
-	_, err := ont.OntTransfer(native)
+	_, err := usdt.UsdtTransfer(native)
 	return err
 }
 
 func ontApprove(native *native.NativeService, from, to common.Address, value uint64) error {
 	native.Tx.SignedAddr = append(native.Tx.SignedAddr, from)
 
-	native.Input = common.SerializeToBytes(&ont.State{from, to, value})
+	native.Input = common.SerializeToBytes(&usdt.State{from, to, value})
 
-	_, err := ont.OntApprove(native)
-	return err
-}
-
-func unboundGovernanceOng(native *native.NativeService) error {
-	_, err := ont.UnboundOngToGovernance(native)
+	_, err := usdt.UsdtApprove(native)
 	return err
 }
 
 func TestTransfer(t *testing.T) {
-	InvokeNativeContract(t, utils.OntContractAddress, func(native *native.NativeService) ([]byte, error) {
+	InvokeNativeContract(t, utils.UsdtContractAddress, func(native *native.NativeService) ([]byte, error) {
 		a := RandomAddress()
 		b := RandomAddress()
 		c := RandomAddress()
 		setOntBalance(native.CacheDB, a, 10000)
-		setOngBalance(native.CacheDB, utils.OntContractAddress, constants.ONG_TOTAL_SUPPLY)
 
 		assert.Equal(t, ontBalanceOf(native, a), 10000)
 		assert.Equal(t, ontBalanceOf(native, b), 0)
@@ -132,7 +98,7 @@ func TestTransfer(t *testing.T) {
 }
 
 func TestTotalAllowance(t *testing.T) {
-	InvokeNativeContract(t, utils.OntContractAddress, func(native *native.NativeService) ([]byte, error) {
+	InvokeNativeContract(t, utils.UsdtContractAddress, func(native *native.NativeService) ([]byte, error) {
 		a := RandomAddress()
 		b := RandomAddress()
 		c := RandomAddress()
@@ -155,54 +121,42 @@ func TestTotalAllowance(t *testing.T) {
 }
 
 func TestGovernanceUnbound(t *testing.T) {
-	InvokeNativeContract(t, utils.OntContractAddress, func(native *native.NativeService) ([]byte, error) {
+	InvokeNativeContract(t, utils.UsdtContractAddress, func(native *native.NativeService) ([]byte, error) {
 		testAddr, _ := common.AddressParseFromBytes([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF})
-		setOntBalance(native.CacheDB, testAddr, constants.ONT_TOTAL_SUPPLY)
-		setOngBalance(native.CacheDB, utils.OntContractAddress, constants.ONG_TOTAL_SUPPLY)
+		setOntBalance(native.CacheDB, testAddr, constants.USDT_TOTAL_SUPPLY)
 
 		native.Time = constants.GENESIS_BLOCK_TIMESTAMP + 1
 
 		assert.Nil(t, ontTransfer(native, testAddr, testAddr, 1))
-		assert.Equal(t, ongAllowance(native, utils.OntContractAddress, testAddr), uint64(5000000000))
 
 		return nil, nil
 	})
 
-	InvokeNativeContract(t, utils.OntContractAddress, func(native *native.NativeService) ([]byte, error) {
-		gov := utils.GovernanceContractAddress
+	InvokeNativeContract(t, utils.UsdtContractAddress, func(native *native.NativeService) ([]byte, error) {
 		testAddr, _ := common.AddressParseFromBytes([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF})
-		setOntBalance(native.CacheDB, testAddr, constants.ONT_TOTAL_SUPPLY)
-		setOngBalance(native.CacheDB, utils.OntContractAddress, constants.ONG_TOTAL_SUPPLY)
+		setOntBalance(native.CacheDB, testAddr, constants.USDT_TOTAL_SUPPLY)
 
 		native.Time = constants.GENESIS_BLOCK_TIMESTAMP + 18*constants.UNBOUND_TIME_INTERVAL
 
 		assert.Nil(t, ontTransfer(native, testAddr, testAddr, 1))
-		assert.Nil(t, unboundGovernanceOng(native))
-		assert.Equal(t, ongBalanceOf(native, gov)+ongBalanceOf(native, testAddr), constants.ONG_TOTAL_SUPPLY)
 
 		return nil, nil
 	})
 
-	InvokeNativeContract(t, utils.OntContractAddress, func(native *native.NativeService) ([]byte, error) {
-		gov := utils.GovernanceContractAddress
+	InvokeNativeContract(t, utils.UsdtContractAddress, func(native *native.NativeService) ([]byte, error) {
 		testAddr, _ := common.AddressParseFromBytes([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF})
-		setOntBalance(native.CacheDB, testAddr, constants.ONT_TOTAL_SUPPLY)
-		setOngBalance(native.CacheDB, utils.OntContractAddress, constants.ONG_TOTAL_SUPPLY)
+		setOntBalance(native.CacheDB, testAddr, constants.USDT_TOTAL_SUPPLY)
 
 		native.Time = constants.GENESIS_BLOCK_TIMESTAMP + 18*constants.UNBOUND_TIME_INTERVAL
 
-		assert.Nil(t, unboundGovernanceOng(native))
 		assert.Nil(t, ontTransfer(native, testAddr, testAddr, 1))
-		assert.Equal(t, ongBalanceOf(native, gov)+ongBalanceOf(native, testAddr), constants.ONG_TOTAL_SUPPLY)
 
 		return nil, nil
 	})
 
-	InvokeNativeContract(t, utils.OntContractAddress, func(native *native.NativeService) ([]byte, error) {
-		gov := utils.GovernanceContractAddress
+	InvokeNativeContract(t, utils.UsdtContractAddress, func(native *native.NativeService) ([]byte, error) {
 		testAddr, _ := common.AddressParseFromBytes([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF})
-		setOntBalance(native.CacheDB, testAddr, constants.ONT_TOTAL_SUPPLY)
-		setOngBalance(native.CacheDB, utils.OntContractAddress, constants.ONG_TOTAL_SUPPLY)
+		setOntBalance(native.CacheDB, testAddr, constants.USDT_TOTAL_SUPPLY)
 
 		native.Time = constants.GENESIS_BLOCK_TIMESTAMP + 1
 		assert.Nil(t, ontTransfer(native, testAddr, testAddr, 1))
@@ -213,9 +167,7 @@ func TestGovernanceUnbound(t *testing.T) {
 
 		native.Time = constants.GENESIS_BLOCK_TIMESTAMP + 18*constants.UNBOUND_TIME_INTERVAL
 
-		assert.Nil(t, unboundGovernanceOng(native))
 		assert.Nil(t, ontTransfer(native, testAddr, testAddr, 1))
-		assert.Equal(t, ongBalanceOf(native, gov)+ongBalanceOf(native, testAddr), constants.ONG_TOTAL_SUPPLY)
 
 		return nil, nil
 	})

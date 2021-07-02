@@ -26,11 +26,10 @@ import (
 
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/serialization"
-	"github.com/saveio/themis/vm/neovm/types"
 )
 
 func WriteVarUint(w io.Writer, value uint64) error {
-	if err := serialization.WriteVarBytes(w, types.BigIntToBytes(big.NewInt(int64(value)))); err != nil {
+	if err := serialization.WriteVarBytes(w, common.BigIntToNeoBytes(big.NewInt(int64(value)))); err != nil {
 		return fmt.Errorf("serialize value error:%v", err)
 	}
 	return nil
@@ -41,7 +40,7 @@ func ReadVarUint(r io.Reader) (uint64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("deserialize value error:%v", err)
 	}
-	v := types.BigIntFromBytes(value)
+	v := common.BigIntFromNeoBytes(value)
 	if v.Cmp(big.NewInt(0)) < 0 {
 		return 0, fmt.Errorf("%s", "value should not be a negative number.")
 	}
@@ -68,7 +67,15 @@ func EncodeAddress(sink *common.ZeroCopySink, addr common.Address) (size uint64)
 }
 
 func EncodeVarUint(sink *common.ZeroCopySink, value uint64) (size uint64) {
-	return sink.WriteVarBytes(types.BigIntToBytes(big.NewInt(int64(value))))
+	return sink.WriteVarBytes(common.BigIntToNeoBytes(big.NewInt(int64(value))))
+}
+
+func EncodeVarBytes(sink *common.ZeroCopySink, v []byte) (size uint64) {
+	return sink.WriteVarBytes(v)
+}
+
+func EncodeString(sink *common.ZeroCopySink, str string) (size uint64) {
+	return sink.WriteVarBytes([]byte(str))
 }
 
 func DecodeVarUint(source *common.ZeroCopySource) (uint64, error) {
@@ -79,7 +86,7 @@ func DecodeVarUint(source *common.ZeroCopySource) (uint64, error) {
 	if irregular {
 		return 0, common.ErrIrregularData
 	}
-	v := types.BigIntFromBytes(value)
+	v := common.BigIntFromNeoBytes(value)
 	if v.Cmp(big.NewInt(0)) < 0 {
 		return 0, fmt.Errorf("%s", "value should not be a negative number.")
 	}
@@ -96,6 +103,46 @@ func DecodeAddress(source *common.ZeroCopySource) (common.Address, error) {
 	}
 
 	return common.AddressParseFromBytes(from)
+}
+
+func DecodeUint32(source *common.ZeroCopySource) (uint32, error) {
+	data, eof := source.NextUint32()
+	if eof {
+		return 0, io.ErrUnexpectedEOF
+	}
+	return data, nil
+}
+
+func DecodeUint64(source *common.ZeroCopySource) (uint64, error) {
+	data, eof := source.NextUint64()
+	if eof {
+		return 0, io.ErrUnexpectedEOF
+	}
+	return data, nil
+}
+
+func DecodeVarBytes(source *common.ZeroCopySource) ([]byte, error) {
+	data, _, irregular, eof := source.NextVarBytes()
+	if eof {
+		return nil, io.ErrUnexpectedEOF
+	}
+	if irregular {
+		return nil, common.ErrIrregularData
+	}
+
+	return data, nil
+}
+
+func DecodeString(source *common.ZeroCopySource) (string, error) {
+	data, _, irregular, eof := source.NextString()
+	if eof {
+		return "", io.ErrUnexpectedEOF
+	}
+	if irregular {
+		return "", common.ErrIrregularData
+	}
+
+	return data, nil
 }
 
 func WriteBytes(w io.Writer, b []byte) error {

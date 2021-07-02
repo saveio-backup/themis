@@ -815,9 +815,9 @@ func executeSplit2(native *native.NativeService, contract common.Address, view u
 		return splitSum, fmt.Errorf("executeSplit, get currentPeerPoolMap error: %v", err)
 	}
 
-	balance, err := getOngBalance(native, utils.GovernanceContractAddress)
+	balance, err := getUsdtBalance(native, utils.GovernanceContractAddress)
 	if err != nil {
-		return splitSum, fmt.Errorf("executeSplit, getOngBalance error: %v", err)
+		return splitSum, fmt.Errorf("executeSplit, getUsdtBalance error: %v", err)
 	}
 	splitFee, err := getSplitFee(native, contract)
 	if err != nil {
@@ -838,10 +838,10 @@ func executeSplit2(native *native.NativeService, contract common.Address, view u
 	if gasAddress.Address == common.ADDRESS_EMPTY {
 		dappIncome = new(big.Int).SetUint64(0)
 	} else {
-		err := appCallTransferOng(native, utils.GovernanceContractAddress, gasAddress.Address, dappIncome.Uint64())
-		if err != nil {
-			return splitSum, fmt.Errorf("appCallTransferOng, appCallTransferOng error: %v", err)
-		}
+		// err := appCallTransferOng(native, utils.GovernanceContractAddress, gasAddress.Address, dappIncome.Uint64())
+		// if err != nil {
+		// 	return splitSum, fmt.Errorf("appCallTransferOng, appCallTransferOng error: %v", err)
+		// }
 	}
 
 	//fee split to node

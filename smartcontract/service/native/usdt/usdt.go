@@ -28,7 +28,6 @@ import (
 	"github.com/saveio/themis/errors"
 	"github.com/saveio/themis/smartcontract/service/native"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
-	"github.com/saveio/themis/vm/neovm/types"
 )
 
 const (
@@ -197,7 +196,7 @@ func UsdtName(native *native.NativeService) ([]byte, error) {
 }
 
 func UsdtDecimals(native *native.NativeService) ([]byte, error) {
-	return types.BigIntToBytes(big.NewInt(int64(constants.USDT_DECIMALS))), nil
+	return common.BigIntToNeoBytes(big.NewInt(int64(constants.USDT_DECIMALS))), nil
 }
 
 func UsdtSymbol(native *native.NativeService) ([]byte, error) {
@@ -210,7 +209,7 @@ func UsdtTotalSupply(native *native.NativeService) ([]byte, error) {
 	if err != nil {
 		return utils.BYTE_FALSE, errors.NewDetailErr(err, errors.ErrNoCode, "[UsdtTotalSupply] get totalSupply error!")
 	}
-	return types.BigIntToBytes(big.NewInt(int64(amount))), nil
+	return common.BigIntToNeoBytes(big.NewInt(int64(amount))), nil
 }
 
 func UsdtBalanceOf(native *native.NativeService) ([]byte, error) {
@@ -243,7 +242,7 @@ func GetBalanceValue(native *native.NativeService, flag byte) ([]byte, error) {
 		return utils.BYTE_FALSE, errors.NewDetailErr(err, errors.ErrNoCode, "[GetBalanceValue] address parse error!")
 	}
 
-	return types.BigIntToBytes(big.NewInt(int64(amount))), nil
+	return common.BigIntToNeoBytes(big.NewInt(int64(amount))), nil
 }
 
 func grantOng(native *native.NativeService, contract, address common.Address, balance uint64) error {

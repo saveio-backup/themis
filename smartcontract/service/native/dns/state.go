@@ -519,6 +519,7 @@ func (this *PeerPoolItem) Deserialize(r io.Reader) error {
 		return fmt.Errorf("serialization.ReadString, deserialize peerPubkey error: %v", err)
 	}
 	address := new(common.Address)
+
 	err = address.Deserialize(r)
 	if err != nil {
 		return fmt.Errorf("address.Deserialize, deserialize address error: %v", err)

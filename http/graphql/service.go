@@ -294,7 +294,7 @@ func (self *resolver) GetTx(args struct{ Hash H256 }) (*transaction, error) {
 
 func (self *resolver) GetBalance(args struct{ Addr Addr }) (*balance, error) {
 	balances, height, err := comm.GetContractBalance(0,
-		[]common.Address{utils.OntContractAddress, utils.OngContractAddress}, args.Addr.Address, true)
+		[]common.Address{utils.UsdtContractAddress}, args.Addr.Address, true)
 	if err != nil {
 		return nil, err
 	}

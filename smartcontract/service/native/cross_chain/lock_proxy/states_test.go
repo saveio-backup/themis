@@ -33,7 +33,7 @@ func TestLockParam_Serialize(t *testing.T) {
 	fromAddr, _ := common.AddressFromBase58("709c937270e1d5a490718a2b4a230186bdd06a01")
 	toAddrBs, _ := hex.DecodeString("709c937270e1d5a490718a2b4a230186bdd06a02")
 	param := LockParam{
-		SourceAssetHash: utils.OntContractAddress,
+		SourceAssetHash: utils.UsdtContractAddress,
 		ToChainID:       0,
 		FromAddress:     fromAddr,
 		ToAddress:       toAddrBs,
@@ -53,7 +53,7 @@ func TestLockParam_Serialize(t *testing.T) {
 func TestUnlockParam_Serialize(t *testing.T) {
 	param := UnlockParam{
 		ArgsBs:             []byte{1, 2, 3, 0, 100},
-		FromContractHashBs: utils.OntContractAddress[:],
+		FromContractHashBs: utils.UsdtContractAddress[:],
 		FromChainId:        2,
 	}
 	sink := common.NewZeroCopySink(nil)
@@ -70,7 +70,7 @@ func TestUnlockParam_Serialize(t *testing.T) {
 func TestArgs_Serialize(t *testing.T) {
 	toAddr, _ := hex.DecodeString("709c937270e1d5a490718a2b4a230186bdd06a02")
 	args := Args{
-		TargetAssetHash: utils.OntContractAddress[:],
+		TargetAssetHash: utils.UsdtContractAddress[:],
 		ToAddress:       toAddr,
 		Value:           100,
 	}
@@ -87,10 +87,10 @@ func TestArgs_Serialize(t *testing.T) {
 
 func TestBindAssetParam_Serialize(t *testing.T) {
 	bindAssetParam := BindAssetParam{
-		SourceAssetHash:    utils.OntContractAddress,
+		SourceAssetHash:    utils.UsdtContractAddress,
 		TargetChainId:      uint64(0),
-		TargetAssetHash:    utils.OntContractAddress[:],
-		Limit:              big.NewInt(int64(constants.ONT_TOTAL_SUPPLY)),
+		TargetAssetHash:    utils.UsdtContractAddress[:],
+		Limit:              big.NewInt(int64(constants.USDT_TOTAL_SUPPLY)),
 		IsTargetChainAsset: false,
 	}
 	sink := common.NewZeroCopySink(nil)

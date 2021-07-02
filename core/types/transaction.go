@@ -24,11 +24,11 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/saveio/themis/crypto/keypair"
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/constants"
 	"github.com/saveio/themis/core/payload"
 	"github.com/saveio/themis/core/program"
+	"github.com/saveio/themis/crypto/keypair"
 )
 
 const MAX_TX_SIZE = 1024 * 1024 // The max size of a transaction to prevent DOS attacks

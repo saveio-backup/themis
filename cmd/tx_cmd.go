@@ -25,6 +25,8 @@ import (
 	cmdcom "github.com/saveio/themis/cmd/common"
 	"github.com/saveio/themis/cmd/utils"
 	"github.com/saveio/themis/common"
+	cutils "github.com/saveio/themis/core/utils"
+	gov "github.com/saveio/themis/smartcontract/service/native/governance"
 	nutils "github.com/saveio/themis/smartcontract/service/native/utils"
 	"github.com/urfave/cli"
 )
@@ -421,14 +423,11 @@ func approveCandidateTx(ctx *cli.Context) error {
 	}
 
 	var payer common.Address
-	payerAddr := ctx.String(utils.GetFlagName(utils.TransactionPayerFlag))
 	if payerAddr != "" {
 		payerAddr, err = cmdcom.ParseAddress(payerAddr, ctx)
 		if err != nil {
 			return err
 		}
-	} else {
-		payerAddr = accAddr
 	}
 	payer, err = common.AddressFromBase58(payerAddr)
 	if err != nil {
@@ -452,10 +451,7 @@ func approveCandidateTx(ctx *cli.Context) error {
 		return fmt.Errorf("IntoImmutable error:%s", err)
 	}
 	sink := common.ZeroCopySink{}
-	err = tx.Serialization(&sink)
-	if err != nil {
-		return fmt.Errorf("tx serialization error:%s", err)
-	}
+	tx.Serialization(&sink)
 	if reject {
 		PrintInfoMsg("Reject %s candidate raw tx:", role)
 	} else {

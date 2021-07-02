@@ -18,508 +18,450 @@
 package cmd
 
 import (
-	"encoding/hex"
+	"bytes"
+	"encoding/json"
+	"flag"
 	"fmt"
+	"io"
+	"sort"
 	"strings"
+	"text/template"
 
-	cmdcom "github.com/saveio/themis/cmd/common"
 	"github.com/saveio/themis/cmd/utils"
-	"github.com/saveio/themis/common"
-	nutils "github.com/saveio/themis/smartcontract/service/native/utils"
 	"github.com/urfave/cli"
 )
 
-var SendTxCommand = cli.Command{
-	Name:        "sendtx",
-	Usage:       "Send raw transaction to Ontology",
-	Description: "Send raw transaction to Ontology.",
-	ArgsUsage:   "<rawtx>",
-	Action:      sendTx,
-	Flags: []cli.Flag{
-		utils.RPCPortFlag,
-		utils.PrepareExecTransactionFlag,
+// AppHelpTemplate is the test template for the default, global app help topic.
+var (
+	AppHelpTemplate = `NAME:
+  {{.App.Name}} - {{.App.Usage}}
+	Ontology CLI is an Ontology node command line Client for starting and managing Ontology nodes,
+	managing user wallets, sending transactions, deploying and invoking contract, and so on.
+USAGE:
+  {{.App.HelpName}} [options]{{if .App.Commands}} command [command options] {{end}}{{if .App.ArgsUsage}}{{.App.ArgsUsage}}{{else}}[arguments...]{{end}}
+  {{if .App.Version}}
+VERSION:
+  {{.App.Version}}
+  {{end}}{{if len .App.Authors}}
+AUTHOR(S):
+  {{range .App.Authors}}{{ . }}{{end}}
+  {{end}}{{if .App.Commands}}
+COMMANDS:
+  {{range .App.Commands}}{{join .Names ", "}}{{ "  " }}{{.Usage}}
+  {{end}}{{end}}{{if .FlagGroups}}
+{{range .FlagGroups}}{{.Name}} OPTIONS:
+  {{range .Flags}}{{.}}
+  {{end}}
+{{end}}{{end}}{{if .App.Copyright }}COPYRIGHT: 
+  {{.App.Copyright}}
+{{end}}
+`
+	SubcommandHelpTemplate = `NAME:
+   {{.HelpName}} - {{if .Description}}{{.Description}}{{else}}{{.Usage}}{{end}}
+USAGE:
+   {{if .UsageText}}{{.UsageText}}{{else}}{{.HelpName}} command{{if .VisibleFlags}} [command options]{{end}} {{if .ArgsUsage}}{{.ArgsUsage}}{{else}}[arguments...]{{end}}{{end}}
+COMMANDS:
+  {{range .Commands}}{{join .Names ", "}}{{ "  " }}{{.Usage}}
+  {{end}}{{if .VisibleFlags}}
+OPTIONS:
+   {{range .VisibleFlags}}{{.}}
+   {{end}}{{end}}
+`
+
+	CommandHelpTemplate = `
+USAGE:
+  {{if .cmd.UsageText}}{{.cmd.UsageText}}{{else}}{{.cmd.HelpName}}{{if .cmd.VisibleFlags}} [command options]{{end}} {{if .cmd.ArgsUsage}}{{.cmd.ArgsUsage}}{{else}}[arguments...]{{end}}{{end}}{{if .cmd.Description}}
+DESCRIPTION:
+  {{.cmd.Description}}
+  {{end}}{{if .cmd.Subcommands}}
+SUBCOMMANDS:
+  {{range .cmd.Subcommands}}{{.Name}}{{with .ShortName}}, {{.}}{{end}}{{ "\t" }}{{.Usage}}
+  {{end}}{{end}}{{if .categorizedFlags}}
+{{range $idx, $categorized := .categorizedFlags}}{{$categorized.Name}} OPTIONS:
+{{range $categorized.Flags}}{{"  "}}{{.}}
+{{end}}
+{{end}}{{end}}`
+)
+
+//flagGroup is a collection of flags belonging to a single topic.
+type flagGroup struct {
+	Name  string
+	Flags []cli.Flag
+}
+
+var AppHelpFlagGroups = []flagGroup{
+	{
+		Name: "ONTOLOGY",
+		Flags: []cli.Flag{
+			utils.ConfigFlag,
+			utils.LogLevelFlag,
+			utils.LogDirFlag,
+			utils.DisableLogFileFlag,
+			utils.DisableEventLogFlag,
+			utils.DataDirFlag,
+			utils.WasmVerifyMethodFlag,
+		},
+	},
+	{
+		Name: "ACCOUNT",
+		Flags: []cli.Flag{
+			utils.WalletFileFlag,
+			utils.AccountAddressFlag,
+			utils.AccountPassFlag,
+			utils.AccountDefaultFlag,
+			utils.AccountKeylenFlag,
+			utils.AccountSetDefaultFlag,
+			utils.AccountSigSchemeFlag,
+			utils.AccountTypeFlag,
+			utils.AccountVerboseFlag,
+			utils.AccountLabelFlag,
+			utils.AccountQuantityFlag,
+			utils.AccountChangePasswdFlag,
+			utils.AccountSourceFileFlag,
+			utils.AccountWIFFlag,
+			utils.AccountLowSecurityFlag,
+			utils.AccountMultiMFlag,
+			utils.AccountMultiPubKeyFlag,
+			utils.IdentityFlag,
+		},
+	},
+	{
+		Name: "CONSENSUS",
+		Flags: []cli.Flag{
+			utils.EnableConsensusFlag,
+			utils.MaxTxInBlockFlag,
+		},
+	},
+	{
+		Name: "TXPOOL",
+		Flags: []cli.Flag{
+			utils.GasPriceFlag,
+			utils.GasLimitFlag,
+			utils.TxpoolPreExecDisableFlag,
+			utils.DisableSyncVerifyTxFlag,
+			utils.DisableBroadcastNetTxFlag,
+		},
+	},
+	{
+		Name: "P2P NODE",
+		Flags: []cli.Flag{
+			utils.ReservedPeersOnlyFlag,
+			utils.ReservedPeersFileFlag,
+			utils.NetworkIdFlag,
+			utils.NodePortFlag,
+			utils.HttpInfoPortFlag,
+			utils.MaxConnInBoundFlag,
+			utils.MaxConnOutBoundFlag,
+			utils.MaxConnInBoundForSingleIPFlag,
+		},
+	},
+	{
+		Name: "RPC",
+		Flags: []cli.Flag{
+			utils.RPCDisabledFlag,
+			utils.RPCPortFlag,
+			utils.RPCLocalEnableFlag,
+			utils.RPCLocalProtFlag,
+		},
+	},
+	{
+		Name: "RESTFUL",
+		Flags: []cli.Flag{
+			utils.RestfulEnableFlag,
+			utils.RestfulPortFlag,
+			utils.RestfulMaxConnsFlag,
+		},
+	},
+	{
+		Name: "GRAPHQL",
+		Flags: []cli.Flag{
+			utils.GraphQLEnableFlag,
+			utils.GraphQLPortFlag,
+			utils.GraphQLMaxConnsFlag,
+		},
+	},
+	{
+		Name: "WEB SOCKET",
+		Flags: []cli.Flag{
+			utils.WsEnabledFlag,
+			utils.WsPortFlag,
+		},
+	},
+	{
+		Name: "TEST MODE",
+		Flags: []cli.Flag{
+			utils.EnableTestModeFlag,
+			utils.TestModeGenBlockTimeFlag,
+		},
+	},
+	{
+		Name: "CONTRACT",
+		Flags: []cli.Flag{
+			utils.ContractPrepareDeployFlag,
+			utils.ContractAddrFlag,
+			utils.ContractAuthorFlag,
+			utils.ContractCodeFileFlag,
+			utils.ContractDescFlag,
+			utils.ContractEmailFlag,
+			utils.ContractNameFlag,
+			utils.ContractVersionFlag,
+			utils.ContractVmTypeFlag,
+			utils.ContractPrepareInvokeFlag,
+			utils.ContractParamsFlag,
+			utils.ContractReturnTypeFlag,
+		},
+	},
+	{
+		Name: "TRANSACTION",
+		Flags: []cli.Flag{
+			utils.TransactionGasLimitFlag,
+			utils.TransactionGasPriceFlag,
+			utils.TransactionAssetFlag,
+			utils.TransactionFromFlag,
+			utils.TransactionToFlag,
+			utils.TransactionAmountFlag,
+			utils.TransactionHashFlag,
+			utils.TransferFromSenderFlag,
+			utils.ApproveAssetFlag,
+			utils.ApproveAssetFromFlag,
+			utils.ApproveAssetToFlag,
+			utils.ApproveAmountFlag,
+			utils.SendTxFlag,
+			utils.ForceSendTxFlag,
+			utils.TransactionPayerFlag,
+			utils.PrepareExecTransactionFlag,
+			utils.TransferFromAmountFlag,
+			utils.WithdrawONGReceiveAccountFlag,
+			utils.WithdrawONGAmountFlag,
+		},
+	},
+	{
+		Name: "Approve",
+		Flags: []cli.Flag{
+			utils.ApproveAssetFromFlag,
+			utils.ApproveAssetToFlag,
+		},
+	},
+	{
+		Name: "EXPORT",
+		Flags: []cli.Flag{
+			utils.ExportFileFlag,
+			utils.ExportSpeedFlag,
+			utils.ExportStartHeightFlag,
+			utils.ExportEndHeightFlag,
+		},
+	},
+	{
+		Name: "IMPORT",
+		Flags: []cli.Flag{
+			utils.ImportFileFlag,
+			utils.ImportEndHeightFlag,
+		},
+	},
+	{
+		Name: "MISC",
 	},
 }
 
-func sendTx(ctx *cli.Context) error {
-	SetRpcPort(ctx)
-	if ctx.NArg() < 1 {
-		PrintErrorMsg("Missing raw tx argument.")
-		cli.ShowSubcommandHelp(ctx)
-		return nil
-	}
-	rawTx := ctx.Args().First()
+func init() {
+	//Using customize AppHelpTemplate
+	cli.AppHelpTemplate = AppHelpTemplate
+	cli.CommandHelpTemplate = CommandHelpTemplate
+	cli.SubcommandHelpTemplate = SubcommandHelpTemplate
+	//Override the default global app help printer
+	cli.HelpPrinter = cusHelpPrinter
+}
 
-	isPre := ctx.IsSet(utils.GetFlagName(utils.PrepareExecTransactionFlag))
-	if isPre {
-		preResult, err := utils.PrepareSendRawTransaction(rawTx)
-		if err != nil {
-			return err
+// byCategory sorts flagGroup by Name in in the order of AppHelpFlagGroups.
+type byCategory []flagGroup
+
+func (a byCategory) Len() int      { return len(a) }
+func (a byCategory) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a byCategory) Less(i, j int) bool {
+	iCat, jCat := a[i].Name, a[j].Name
+	iIdx, jIdx := len(AppHelpFlagGroups), len(AppHelpFlagGroups) // ensure non categorized flags come last
+
+	for i, group := range AppHelpFlagGroups {
+		if iCat == group.Name {
+			iIdx = i
 		}
-		if preResult.State == 0 {
-			return fmt.Errorf("prepare execute transaction failed. %v", preResult)
-		}
-		PrintInfoMsg("Prepare execute transaction success.")
-		PrintInfoMsg("Gas limit:%d", preResult.Gas)
-		PrintInfoMsg("Result:%v", preResult.Result)
-		return nil
-	}
-	txHash, err := utils.SendRawTransactionData(rawTx)
-	if err != nil {
-		return err
-	}
-	PrintInfoMsg("Send transaction success.")
-	PrintInfoMsg("  TxHash:%s", txHash)
-	PrintInfoMsg("\nTip:")
-	PrintInfoMsg("  Using './themis info status %s' to query transaction status.", txHash)
-	return nil
-}
-
-var TxCommond = cli.Command{
-	Name:  "buildtx",
-	Usage: "Build transaction",
-	Subcommands: []cli.Command{
-		TransferTxCommond,
-		ApproveTxCommond,
-		TransferFromTxCommond,
-		ApproveCandidateTxCommond,
-		UpdateConfigTxCommond,
-	},
-	Description: "Build transaction",
-}
-
-var TransferTxCommond = cli.Command{
-	Name:        "transfer",
-	Usage:       "Build transfer transaction",
-	Description: "Build transfer transaction.",
-	Action:      transferTx,
-	Flags: []cli.Flag{
-		utils.WalletFileFlag,
-		utils.TransactionGasPriceFlag,
-		utils.TransactionGasLimitFlag,
-		utils.TransactionPayerFlag,
-		utils.TransactionAssetFlag,
-		utils.TransactionFromFlag,
-		utils.TransactionToFlag,
-		utils.TransactionAmountFlag,
-	},
-}
-
-var ApproveTxCommond = cli.Command{
-	Name:        "approve",
-	Usage:       "Build approve transaction",
-	Description: "Build approve transaction.",
-	Action:      approveTx,
-	Flags: []cli.Flag{
-		utils.WalletFileFlag,
-		utils.TransactionGasPriceFlag,
-		utils.TransactionGasLimitFlag,
-		utils.TransactionPayerFlag,
-		utils.ApproveAssetFlag,
-		utils.ApproveAssetFromFlag,
-		utils.ApproveAssetToFlag,
-		utils.ApproveAmountFlag,
-	},
-}
-
-var TransferFromTxCommond = cli.Command{
-	Name:        "transferfrom",
-	Usage:       "Build transfer from transaction",
-	Description: "Build transfer from transaction.",
-	Action:      transferFromTx,
-	Flags: []cli.Flag{
-		utils.WalletFileFlag,
-		utils.TransactionGasPriceFlag,
-		utils.TransactionGasLimitFlag,
-		utils.ApproveAssetFlag,
-		utils.TransactionPayerFlag,
-		utils.TransferFromSenderFlag,
-		utils.ApproveAssetFromFlag,
-		utils.ApproveAssetToFlag,
-		utils.TransferFromAmountFlag,
-	},
-}
-
-var ApproveCandidateTxCommond = cli.Command{
-	Name:        "approvecand",
-	Usage:       "Build approve consensus,dns candidate transaction",
-	Description: "Build approve consensus,dns candidate transaction.",
-	Action:      approveCandidateTx,
-	Flags: []cli.Flag{
-		utils.WalletFileFlag,
-		utils.TransactionGasPriceFlag,
-		utils.TransactionGasLimitFlag,
-		utils.TransactionPayerFlag,
-		utils.RejectCandidateFlag,
-		utils.ApproveCandidatePubkeyFlag,
-		utils.ApproveCandidateRoleFlag,
-	},
-}
-
-var UpdateConfigTxCommond = cli.Command{
-	Name:        "updateconfig",
-	Usage:       "Update consensus config in governance contract",
-	Description: "Update consensus config in governance contract.",
-	Action:      updateConfigTx,
-	Flags: []cli.Flag{
-		utils.WalletFileFlag,
-		utils.TransactionGasPriceFlag,
-		utils.TransactionGasLimitFlag,
-		utils.TransactionPayerFlag,
-		utils.ConfigNFlag,
-		utils.ConfigCFlag,
-		utils.ConfigKFlag,
-		utils.ConfigLFlag,
-		utils.ConfigBlockMsgDelayFlag,
-		utils.ConfigHashMsgDelayFlag,
-		utils.ConfigPeerHandshakeTimeoutFlag,
-		utils.ConfigMaxBlockChangeViewFlag,
-	},
-}
-
-func transferTx(ctx *cli.Context) error {
-	if !ctx.IsSet(utils.GetFlagName(utils.TransactionToFlag)) ||
-		!ctx.IsSet(utils.GetFlagName(utils.TransactionFromFlag)) ||
-		!ctx.IsSet(utils.GetFlagName(utils.TransactionAmountFlag)) {
-		PrintErrorMsg("Missing %s %s or %s argument.", utils.TransactionToFlag.Name, utils.TransactionFromFlag.Name, utils.TransactionAmountFlag.Name)
-		cli.ShowSubcommandHelp(ctx)
-		return nil
-	}
-
-	gasPrice := ctx.Uint64(utils.TransactionGasPriceFlag.Name)
-	gasLimit := ctx.Uint64(utils.TransactionGasLimitFlag.Name)
-
-	asset := ctx.String(utils.GetFlagName(utils.TransactionAssetFlag))
-	if asset == "" {
-		asset = utils.ASSET_USDT
-	}
-	from := ctx.String(utils.GetFlagName(utils.TransactionFromFlag))
-	fromAddr, err := cmdcom.ParseAddress(from, ctx)
-	if err != nil {
-		return err
-	}
-	to := ctx.String(utils.GetFlagName(utils.TransactionToFlag))
-	toAddr, err := cmdcom.ParseAddress(to, ctx)
-	if err != nil {
-		return err
-	}
-
-	var payer common.Address
-	payerAddr := ctx.String(utils.GetFlagName(utils.TransactionPayerFlag))
-	if payerAddr != "" {
-		payerAddr, err = cmdcom.ParseAddress(payerAddr, ctx)
-		if err != nil {
-			return err
-		}
-	} else {
-		payerAddr = fromAddr
-	}
-
-	payer, err = common.AddressFromBase58(payerAddr)
-	if err != nil {
-		return fmt.Errorf("invalid payer address:%s", err)
-	}
-
-	var amount uint64
-	amountStr := ctx.String(utils.TransactionAmountFlag.Name)
-	switch strings.ToLower(asset) {
-	case utils.ASSET_USDT:
-		amount = utils.ParseUsdt(amountStr)
-		amountStr = utils.FormatUsdt(amount)
-	default:
-		return fmt.Errorf("unsupport asset:%s", asset)
-	}
-
-	err = utils.CheckAssetAmount(asset, amount)
-	if err != nil {
-		return err
-	}
-
-	mutTx, err := utils.TransferTx(gasPrice, gasLimit, asset, fromAddr, toAddr, amount)
-	if err != nil {
-		return err
-	}
-	mutTx.Payer = payer
-
-	tx, err := mutTx.IntoImmutable()
-	if err != nil {
-		return fmt.Errorf("IntoImmutable error:%s", err)
-	}
-	sink := common.ZeroCopySink{}
-	tx.Serialization(&sink)
-	PrintInfoMsg("Transfer raw tx:")
-	PrintInfoMsg(hex.EncodeToString(sink.Bytes()))
-	return nil
-}
-
-func approveTx(ctx *cli.Context) error {
-	asset := ctx.String(utils.GetFlagName(utils.ApproveAssetFlag))
-	from := ctx.String(utils.GetFlagName(utils.ApproveAssetFromFlag))
-	to := ctx.String(utils.GetFlagName(utils.ApproveAssetToFlag))
-	amountStr := ctx.String(utils.GetFlagName(utils.ApproveAmountFlag))
-	if asset == "" ||
-		from == "" ||
-		to == "" ||
-		amountStr == "" {
-		PrintErrorMsg("Missing %s %s %s or %s argument.", utils.ApproveAssetFlag.Name, utils.ApproveAssetFromFlag.Name, utils.ApproveAssetToFlag.Name, utils.ApproveAmountFlag.Name)
-		cli.ShowSubcommandHelp(ctx)
-		return nil
-	}
-	fromAddr, err := cmdcom.ParseAddress(from, ctx)
-	if err != nil {
-		return err
-	}
-	toAddr, err := cmdcom.ParseAddress(to, ctx)
-	if err != nil {
-		return err
-	}
-
-	var payer common.Address
-	payerAddr := ctx.String(utils.GetFlagName(utils.TransactionPayerFlag))
-	if payerAddr != "" {
-		payerAddr, err = cmdcom.ParseAddress(payerAddr, ctx)
-		if err != nil {
-			return err
-		}
-	} else {
-		payerAddr = fromAddr
-	}
-
-	payer, err = common.AddressFromBase58(payerAddr)
-	if err != nil {
-		return fmt.Errorf("invalid payer address:%s", err)
-	}
-
-	var amount uint64
-	switch strings.ToLower(asset) {
-	case utils.ASSET_USDT:
-		amount = utils.ParseUsdt(amountStr)
-		amountStr = utils.FormatUsdt(amount)
-	default:
-		return fmt.Errorf("unsupport asset:%s", asset)
-	}
-
-	err = utils.CheckAssetAmount(asset, amount)
-	if err != nil {
-		return err
-	}
-
-	gasPrice := ctx.Uint64(utils.TransactionGasPriceFlag.Name)
-	gasLimit := ctx.Uint64(utils.TransactionGasLimitFlag.Name)
-
-	mutTx, err := utils.ApproveTx(gasPrice, gasLimit, asset, fromAddr, toAddr, amount)
-	if err != nil {
-		return err
-	}
-	mutTx.Payer = payer
-
-	tx, err := mutTx.IntoImmutable()
-	if err != nil {
-		return fmt.Errorf("IntoImmutable error:%s", err)
-	}
-	sink := common.ZeroCopySink{}
-	tx.Serialization(&sink)
-	PrintInfoMsg("Approve raw tx:")
-	PrintInfoMsg(hex.EncodeToString(sink.Bytes()))
-	return nil
-}
-
-func transferFromTx(ctx *cli.Context) error {
-	asset := ctx.String(utils.GetFlagName(utils.ApproveAssetFlag))
-	from := ctx.String(utils.GetFlagName(utils.ApproveAssetFromFlag))
-	to := ctx.String(utils.GetFlagName(utils.ApproveAssetToFlag))
-	amountStr := ctx.String(utils.GetFlagName(utils.TransferFromAmountFlag))
-	if asset == "" ||
-		from == "" ||
-		to == "" ||
-		amountStr == "" {
-		PrintErrorMsg("Missing %s %s %s or %s argument.", utils.ApproveAssetFlag.Name, utils.ApproveAssetFromFlag.Name, utils.ApproveAssetToFlag.Name, utils.TransferFromAmountFlag.Name)
-		cli.ShowSubcommandHelp(ctx)
-		return nil
-	}
-	fromAddr, err := cmdcom.ParseAddress(from, ctx)
-	if err != nil {
-		return err
-	}
-	toAddr, err := cmdcom.ParseAddress(to, ctx)
-	if err != nil {
-		return err
-	}
-
-	var sendAddr string
-	sender := ctx.String(utils.GetFlagName(utils.TransferFromSenderFlag))
-	if sender == "" {
-		sendAddr = toAddr
-	} else {
-		sendAddr, err = cmdcom.ParseAddress(sender, ctx)
-		if err != nil {
-			return err
+		if jCat == group.Name {
+			jIdx = i
 		}
 	}
 
-	var payer common.Address
-	payerAddr := ctx.String(utils.GetFlagName(utils.TransactionPayerFlag))
-	if payerAddr != "" {
-		payerAddr, err = cmdcom.ParseAddress(payerAddr, ctx)
-		if err != nil {
-			return err
-		}
-	} else {
-		payerAddr = sendAddr
-	}
-
-	payer, err = common.AddressFromBase58(payerAddr)
-	if err != nil {
-		return fmt.Errorf("invalid payer address:%s", err)
-	}
-
-	var amount uint64
-	switch strings.ToLower(asset) {
-	case utils.ASSET_USDT:
-		amount = utils.ParseUsdt(amountStr)
-		amountStr = utils.FormatUsdt(amount)
-	default:
-		return fmt.Errorf("unsupport asset:%s", asset)
-	}
-
-	err = utils.CheckAssetAmount(asset, amount)
-	if err != nil {
-		return err
-	}
-
-	gasPrice := ctx.Uint64(utils.TransactionGasPriceFlag.Name)
-	gasLimit := ctx.Uint64(utils.TransactionGasLimitFlag.Name)
-
-	mutTx, err := utils.TransferFromTx(gasPrice, gasLimit, asset, sendAddr, fromAddr, toAddr, amount)
-	if err != nil {
-		return err
-	}
-	mutTx.Payer = payer
-
-	tx, err := mutTx.IntoImmutable()
-	if err != nil {
-		return fmt.Errorf("IntoImmutable error:%s", err)
-	}
-	sink := common.ZeroCopySink{}
-	tx.Serialization(&sink)
-	PrintInfoMsg("TransferFrom raw tx:")
-	PrintInfoMsg(hex.EncodeToString(sink.Bytes()))
-	return nil
+	return iIdx < jIdx
 }
 
-func approveCandidateTx(ctx *cli.Context) error {
-	var err error
-
-	peerPubkey := ctx.String(utils.GetFlagName(utils.ApproveCandidatePubkeyFlag))
-	payerAddr := ctx.String(utils.GetFlagName(utils.TransactionPayerFlag))
-
-	if peerPubkey == "" ||
-		payerAddr == "" {
-		PrintErrorMsg("Missing %s,%s argument.", utils.ApproveCandidatePubkeyFlag.Name, utils.TransactionPayerFlag.Name)
-		cli.ShowSubcommandHelp(ctx)
-		return nil
-	}
-
-	var payer common.Address
-	payerAddr := ctx.String(utils.GetFlagName(utils.TransactionPayerFlag))
-	if payerAddr != "" {
-		payerAddr, err = cmdcom.ParseAddress(payerAddr, ctx)
-		if err != nil {
-			return err
+func flagCategory(flag cli.Flag) string {
+	for _, category := range AppHelpFlagGroups {
+		for _, catFlag := range category.Flags {
+			if catFlag.GetName() == flag.GetName() {
+				catFlagString := strings.Replace(catFlag.String(), " ", "", -1)
+				catFlagString = strings.Replace(catFlagString, "\t", "", -1)
+				flagString := strings.Replace(flag.String(), " ", "", -1)
+				if catFlagString == flagString {
+					return category.Name
+				}
+			}
 		}
-	} else {
-		payerAddr = accAddr
 	}
-	payer, err = common.AddressFromBase58(payerAddr)
-	if err != nil {
-		return fmt.Errorf("invalid payer address:%s", err)
-	}
-
-	gasPrice := ctx.Uint64(utils.TransactionGasPriceFlag.Name)
-	gasLimit := ctx.Uint64(utils.TransactionGasLimitFlag.Name)
-	role := ctx.String(utils.GetFlagName(utils.ApproveCandidateRoleFlag))
-	reject := ctx.Bool(utils.GetFlagName(utils.RejectCandidateFlag))
-
-	mutTx, err := utils.ApproveCandidateTx(gasPrice, gasLimit, reject, peerPubkey, role)
-	if err != nil {
-		return err
-	}
-
-	mutTx.Payer = payer
-
-	tx, err := mutTx.IntoImmutable()
-	if err != nil {
-		return fmt.Errorf("IntoImmutable error:%s", err)
-	}
-	sink := common.ZeroCopySink{}
-	err = tx.Serialization(&sink)
-	if err != nil {
-		return fmt.Errorf("tx serialization error:%s", err)
-	}
-	if reject {
-		PrintInfoMsg("Reject %s candidate raw tx:", role)
-	} else {
-		PrintInfoMsg("Approve %s candidate raw tx:", role)
-	}
-	PrintInfoMsg(hex.EncodeToString(sink.Bytes()))
-	return nil
+	return "MISC"
 }
 
-func updateConfigTx(ctx *cli.Context) error {
-	var err error
+type cusHelpData struct {
+	App        interface{}
+	FlagGroups []flagGroup
+}
 
-	payerAddr := ctx.String(utils.GetFlagName(utils.TransactionPayerFlag))
+type FmtFlag struct {
+	name  string
+	usage string
+}
 
-	if payerAddr == "" {
-		PrintErrorMsg("Missing %s argument.", utils.TransactionPayerFlag.Name)
-		cli.ShowSubcommandHelp(ctx)
-		return nil
-	}
+func (this *FmtFlag) GetName() string {
+	return this.name
+}
 
-	if payerAddr != "" {
-		payerAddr, err = cmdcom.ParseAddress(payerAddr, ctx)
-		if err != nil {
-			return err
+func (this *FmtFlag) String() string {
+	return this.usage
+}
+
+func (this *FmtFlag) Apply(*flag.FlagSet) {}
+
+func formatCommand(cmds []cli.Command) []cli.Command {
+	maxWidth := 0
+	for _, cmd := range cmds {
+		if len(cmd.Name) > maxWidth {
+			maxWidth = len(cmd.Name)
 		}
 	}
-	payer, err := common.AddressFromBase58(payerAddr)
+	formatter := "%-" + fmt.Sprintf("%d", maxWidth) + "s"
+	newCmds := make([]cli.Command, 0, len(cmds))
+	for _, cmd := range cmds {
+		name := cmd.Name
+		if len(cmd.Aliases) != 0 {
+			for _, aliase := range cmd.Aliases {
+				name += ", " + aliase
+			}
+			cmd.Aliases = nil
+		}
+		cmd.Name = fmt.Sprintf(formatter, name)
+		newCmds = append(newCmds, cmd)
+	}
+	return newCmds
+}
+
+func formatFlags(flags []cli.Flag) []cli.Flag {
+	maxWidth := 0
+	fmtFlagStrs := make(map[string][]string)
+	for _, flag := range flags {
+		fs := strings.Split(flag.String(), "\t")
+		if len(fs[0]) > maxWidth {
+			maxWidth = len(fs[0])
+		}
+		fmtFlagStrs[flag.GetName()] = fs
+	}
+	formatter := "%-" + fmt.Sprintf("%d", maxWidth) + "s   %s"
+	fmtFlags := make([]cli.Flag, 0, len(fmtFlagStrs))
+	for _, flag := range flags {
+		flagStrs := fmtFlagStrs[flag.GetName()]
+
+		fmtFlags = append(fmtFlags, &FmtFlag{
+			name:  flag.GetName(),
+			usage: fmt.Sprintf(formatter, flagStrs[0], flagStrs[1]),
+		})
+	}
+	return fmtFlags
+}
+
+func cusHelpPrinter(w io.Writer, tmpl string, data interface{}) {
+	if tmpl == AppHelpTemplate {
+		cliApp := data.(*cli.App)
+		cliApp.Commands = formatCommand(cliApp.Commands)
+		cliApp.Flags = formatFlags(cliApp.Flags)
+		categorized := make(map[string][]cli.Flag)
+		for _, flag := range data.(*cli.App).Flags {
+			_, ok := categorized[flag.String()]
+			if !ok {
+				gName := flagCategory(flag)
+				categorized[gName] = append(categorized[gName], flag)
+			}
+		}
+		sorted := make([]flagGroup, 0, len(categorized))
+		for cat, flgs := range categorized {
+			sorted = append(sorted, flagGroup{cat, flgs})
+		}
+		sort.Sort(byCategory(sorted))
+		cusData := &cusHelpData{
+			App:        cliApp,
+			FlagGroups: sorted,
+		}
+		data = cusData
+	} else if tmpl == SubcommandHelpTemplate {
+		cliApp := data.(*cli.App)
+		cliApp.Commands = formatCommand(cliApp.Commands)
+		data = cliApp
+	} else if tmpl == CommandHelpTemplate {
+		cliCmd := data.(cli.Command)
+		cliCmd.Flags = formatFlags(cliCmd.Flags)
+		categorized := make(map[string][]cli.Flag)
+		for _, flag := range cliCmd.Flags {
+			_, ok := categorized[flag.String()]
+			if !ok {
+				categorized[flagCategory(flag)] = append(categorized[flagCategory(flag)], flag)
+			}
+		}
+		sorted := make([]flagGroup, 0, len(categorized))
+		for cat, flgs := range categorized {
+			sorted = append(sorted, flagGroup{cat, flgs})
+		}
+		sort.Sort(byCategory(sorted))
+		data = map[string]interface{}{
+			"cmd":              cliCmd,
+			"categorizedFlags": sorted,
+		}
+	}
+
+	funcMap := template.FuncMap{"join": strings.Join}
+	t := template.Must(template.New("help").Funcs(funcMap).Parse(tmpl))
+	err := t.Execute(w, data)
 	if err != nil {
-		return fmt.Errorf("invalid payer address:%s", err)
+		// If the writer is closed, t.Execute will fail, and there's nothing we can do to recover.
+		PrintErrorMsg("CLI TEMPLATE ERROR: %#v\n", err)
+		return
 	}
+}
 
-	gasPrice := ctx.Uint64(utils.TransactionGasPriceFlag.Name)
-	gasLimit := ctx.Uint64(utils.TransactionGasLimitFlag.Name)
+func PrintErrorMsg(format string, a ...interface{}) {
+	format = fmt.Sprintf("\033[31m[ERROR] %s\033[0m\n", format) //Print error msg with red color
+	fmt.Printf(format, a...)
+}
 
-	configure := &gov.Configuration{N: uint32(ctx.Uint64(utils.ConfigNFlag.Name)),
-		C:                    uint32(ctx.Uint64(utils.ConfigCFlag.Name)),
-		K:                    uint32(ctx.Uint64(utils.ConfigKFlag.Name)),
-		L:                    uint32(ctx.Uint64(utils.ConfigLFlag.Name)),
-		BlockMsgDelay:        uint32(ctx.Uint64(utils.ConfigBlockMsgDelayFlag.Name)),
-		HashMsgDelay:         uint32(ctx.Uint64(utils.ConfigHashMsgDelayFlag.Name)),
-		PeerHandshakeTimeout: uint32(ctx.Uint64(utils.ConfigPeerHandshakeTimeoutFlag.Name)),
-		MaxBlockChangeView:   uint32(ctx.Uint64(utils.ConfigMaxBlockChangeViewFlag.Name)),
-	}
+func PrintWarnMsg(format string, a ...interface{}) {
+	format = fmt.Sprintf("\033[33m[WARN] %s\033[0m\n", format) //Print error msg with yellow color
+	fmt.Printf(format, a...)
+}
 
-	invokeCode, err := cutils.BuildNativeInvokeCode(nutils.GovernanceContractAddress,
-		utils.VERSION_TRANSACTION, gov.UPDATE_CONFIG, []interface{}{configure})
+func PrintInfoMsg(format string, a ...interface{}) {
+	fmt.Printf(format+"\n", a...)
+}
 
+func PrintJsonData(data []byte) {
+	var out bytes.Buffer
+	err := json.Indent(&out, data, "", "   ")
 	if err != nil {
-		return fmt.Errorf("build invoke code error:%s", err)
+		PrintErrorMsg("json.Indent error:%s", err)
+		return
 	}
-	mutTx := utils.NewInvokeTransaction(gasPrice, gasLimit, invokeCode)
+	PrintInfoMsg(out.String())
+}
 
-	mutTx.Payer = payer
-	tx, err := mutTx.IntoImmutable()
+func PrintJsonObject(obj interface{}) {
+	data, err := json.Marshal(obj)
 	if err != nil {
-		return fmt.Errorf("IntoImmutable error:%s", err)
+		PrintErrorMsg("json.Marshal error:%s", err)
+		return
 	}
-	sink := common.ZeroCopySink{}
-	err = tx.Serialization(&sink)
-	if err != nil {
-		return fmt.Errorf("tx serialization error:%s", err)
-	}
-
-	PrintInfoMsg("Update config raw tx:")
-	PrintInfoMsg(hex.EncodeToString(sink.Bytes()))
-	return nil
+	PrintJsonData(data)
 }

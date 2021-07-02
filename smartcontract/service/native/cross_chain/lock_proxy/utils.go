@@ -28,7 +28,7 @@ import (
 	"github.com/saveio/themis/smartcontract/event"
 	"github.com/saveio/themis/smartcontract/service/native"
 	"github.com/saveio/themis/smartcontract/service/native/cross_chain/cross_chain_manager"
-	"github.com/saveio/themis/smartcontract/service/native/ont"
+	"github.com/saveio/themis/smartcontract/service/native/usdt"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
 
@@ -81,9 +81,9 @@ func getCreateTxArgs(toChainID uint64, contractHashBytes []byte, method string, 
 	return sink.Bytes()
 }
 
-func getTransferInput(state ont.State) []byte {
-	var transfers ont.Transfers
-	transfers.States = []ont.State{state}
+func getTransferInput(state usdt.State) []byte {
+	var transfers usdt.Transfers
+	transfers.States = []usdt.State{state}
 	sink := common.NewZeroCopySink(nil)
 	transfers.Serialization(sink)
 	return sink.Bytes()
@@ -138,16 +138,16 @@ func getAmount(native *native.NativeService, storgedKey []byte) (*big.Int, error
 
 func getAllowanceInput() []byte {
 	sink := common.NewZeroCopySink(nil)
-	sink.WriteAddress(utils.OntContractAddress)
+	sink.WriteAddress(utils.UsdtContractAddress)
 	sink.WriteAddress(utils.LockProxyContractAddress)
 
 	return sink.Bytes()
 }
 
 func getTransferFromInput(toAddress common.Address, value uint64) []byte {
-	transferFromState := ont.TransferFrom{
+	transferFromState := usdt.TransferFrom{
 		Sender: utils.LockProxyContractAddress,
-		From:   utils.OntContractAddress,
+		From:   utils.UsdtContractAddress,
 		To:     toAddress,
 		Value:  value,
 	}

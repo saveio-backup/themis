@@ -63,7 +63,6 @@ const (
 	WHITE_NODE                       = "whiteNode"
 	QUIT_NODE                        = "quitNode"
 	WITHDRAW                         = "withdraw"
-	WITHDRAW_ONG                     = "withdrawOng"
 	WITHDRAW_FEE                     = "withdrawFee"
 	COMMIT_DPOS                      = "commitDpos"
 	UPDATE_CONFIG                    = "updateConfig"
@@ -81,6 +80,7 @@ const (
 	GET_PEER_POOL                    = "getPeerPool"
 	GET_PEER_INFO                    = "getPeerInfo"
 	GET_PEER_POOL_BY_ADDRESS         = "getPeerPoolByAddress"
+	GAS_REVENUE                      = "gasRevenue"
 
 	//key prefix
 	GLOBAL_PARAM      = "globalParam"
@@ -975,14 +975,6 @@ func Withdraw(native *native.NativeService) ([]byte, error) {
 func CommitDpos(native *native.NativeService) ([]byte, error) {
 	contract := native.ContextRef.CurrentContext().ContractAddress
 
-	if native.Time > config.GetOntHolderUnboundDeadline()+constants.GENESIS_BLOCK_TIMESTAMP {
-		//unbound ong to governance
-		err := appCallUnboundGovernanceOng(native)
-		if err != nil {
-			return utils.BYTE_FALSE, fmt.Errorf("CommitDpos, appCallUnboundGovernanceOng error: %v", err)
-		}
-	}
-
 	// get config
 	config, err := getConfig(native, contract)
 	if err != nil {
@@ -1257,49 +1249,6 @@ func TransferPenalty(native *native.NativeService) ([]byte, error) {
 		return nil, fmt.Errorf("withdrawPenaltyStake, withdraw penaltyStake error: %v", err)
 	}
 
-	return utils.BYTE_TRUE, nil
-}
-
-//Withdraw unbounded ONG according to deposit ONT in this governance contract
-func WithdrawOng(native *native.NativeService) ([]byte, error) {
-	params := new(WithdrawOngParam)
-	if err := params.Deserialization(common.NewZeroCopySource(native.Input)); err != nil {
-		return utils.BYTE_FALSE, fmt.Errorf("deserialize, deserialize transferPenaltyParam error: %v", err)
-	}
-	contract := native.ContextRef.CurrentContext().ContractAddress
-
-	//check witness
-	err := utils.ValidateOwner(native, params.Address)
-	if err != nil {
-		return utils.BYTE_FALSE, fmt.Errorf("withdrawOng, checkWitness error: %v", err)
-	}
-
-	// ont transfer to trigger unboundong
-	err = appCallTransferOnt(native, utils.GovernanceContractAddress, utils.GovernanceContractAddress, 1)
-	if err != nil {
-		return utils.BYTE_FALSE, fmt.Errorf("appCallTransferOnt, ont transfer error: %v", err)
-	}
-
-	totalStake, err := getTotalStake(native, contract, params.Address)
-	if err != nil {
-		return utils.BYTE_FALSE, fmt.Errorf("getTotalStake, get totalStake error: %v", err)
-	}
-
-	preTimeOffset := totalStake.TimeOffset
-	timeOffset := native.Time - constants.GENESIS_BLOCK_TIMESTAMP
-
-	amount := utils.CalcUnbindOng(totalStake.Stake, preTimeOffset, timeOffset)
-	err = appCallTransferFromOng(native, utils.GovernanceContractAddress, utils.OntContractAddress, totalStake.Address, amount)
-	if err != nil {
-		return utils.BYTE_FALSE, fmt.Errorf("appCallTransferFromOng, transfer from ong error: %v", err)
-	}
-
-	totalStake.TimeOffset = timeOffset
-
-	err = putTotalStake(native, contract, totalStake)
-	if err != nil {
-		return utils.BYTE_FALSE, fmt.Errorf("putTotalStake, put totalStake error: %v", err)
-	}
 	return utils.BYTE_TRUE, nil
 }
 

@@ -476,7 +476,7 @@ func (this *BlockSyncMgr) syncHeader() {
 		this.appendReqTime(reqNode.GetID())
 	}
 
-	log.Infof("Header sync request height:%d", NextHeaderId)
+	log.Infof("Header sync request height:%d to %s", NextHeaderId, reqNode.Info)
 }
 
 func (this *BlockSyncMgr) syncBlock() {

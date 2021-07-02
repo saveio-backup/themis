@@ -24,6 +24,8 @@ import (
 	"io"
 	"reflect"
 
+	"github.com/ontio/wagon/exec"
+	"github.com/ontio/wagon/wasm"
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/log"
 	"github.com/saveio/themis/core/payload"
@@ -36,8 +38,6 @@ import (
 	"github.com/saveio/themis/smartcontract/states"
 	"github.com/saveio/themis/vm/crossvm_codec"
 	neotypes "github.com/saveio/themis/vm/neovm/types"
-	"github.com/ontio/wagon/exec"
-	"github.com/ontio/wagon/wasm"
 )
 
 type ContractType byte

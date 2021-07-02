@@ -17,7 +17,6 @@ require (
 	github.com/gosuri/uilive v0.0.4 // indirect
 	github.com/gosuri/uiprogress v0.0.1
 	github.com/graph-gophers/graphql-go v0.0.0-20191115155744-f33e81362277
-	github.com/gtank/ristretto255 v0.1.2
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d
 	github.com/howeyc/gopass v0.0.0-20190910152052-7cb4b85ec19c
 	github.com/itchyny/base58-go v0.1.0
@@ -30,8 +29,10 @@ require (
 	github.com/pborman/uuid v1.2.1
 	github.com/prometheus/client_golang v0.9.1
 	github.com/scylladb/go-set v1.0.2
+	github.com/shirou/gopsutil v3.21.3+incompatible
 	github.com/stretchr/testify v1.7.0
 	github.com/syndtr/goleveldb v1.0.1-0.20190923125748-758128399b1d
+	github.com/tklauser/go-sysconf v0.3.6 // indirect
 	github.com/urfave/cli v1.22.5
 	github.com/valyala/bytebufferpool v1.0.0
 	golang.org/x/crypto v0.0.0-20210415154028-4f45737414dc

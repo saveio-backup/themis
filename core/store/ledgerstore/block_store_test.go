@@ -24,13 +24,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/saveio/themis/crypto/keypair"
 	"github.com/saveio/themis/account"
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/core/payload"
 	"github.com/saveio/themis/core/types"
 	"github.com/saveio/themis/core/utils"
-	"github.com/saveio/themis/smartcontract/service/native/ont"
+	"github.com/saveio/themis/crypto/keypair"
+	"github.com/saveio/themis/smartcontract/service/native/usdt"
 	nutils "github.com/saveio/themis/smartcontract/service/native/utils"
 	"github.com/stretchr/testify/assert"
 )
@@ -366,14 +366,14 @@ func TestBlock(t *testing.T) {
 }
 
 func transferTx(from, to common.Address, amount uint64) (*types.Transaction, error) {
-	var sts []ont.State
-	sts = append(sts, ont.State{
+	var sts []usdt.State
+	sts = append(sts, usdt.State{
 		From:  from,
 		To:    to,
 		Value: amount,
 	})
 	var cversion byte
-	return invokeSmartContractTx(0, 30000, cversion, nutils.OntContractAddress, "transfer", []interface{}{sts})
+	return invokeSmartContractTx(0, 30000, cversion, nutils.UsdtContractAddress, "transfer", []interface{}{sts})
 }
 
 func invokeSmartContractTx(gasPrice,
