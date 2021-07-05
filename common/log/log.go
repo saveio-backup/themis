@@ -417,6 +417,10 @@ func checkIfNeedNewFile() bool {
 	}
 }
 
+func CheckIfNeedNewFile() bool {
+	return checkIfNeedNewFile()
+}
+
 func ClosePrintLog() error {
 	var err error
 	if Log().logFile != nil {
