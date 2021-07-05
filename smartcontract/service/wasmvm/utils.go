@@ -22,10 +22,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/saveio/themis/common/config"
 	"github.com/ontio/wagon/exec"
 	"github.com/ontio/wagon/validate"
 	"github.com/ontio/wagon/wasm"
+	"github.com/saveio/themis/common/config"
 )
 
 func ReadWasmMemory(proc *exec.Process, ptr uint32, len uint32) ([]byte, error) {
@@ -110,10 +110,10 @@ func ReadWasmModule(code []byte, verify config.VerifyMethod) (*exec.CompiledModu
 				return nil, err
 			}
 		case config.JitVerifyMethod:
-			err := WasmjitValidate(code)
-			if err != nil {
-				return nil, err
-			}
+			// err := WasmjitValidate(code)
+			// if err != nil {
+			// 	return nil, err
+			// }
 		}
 	}
 

@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	lru "github.com/hashicorp/golang-lru"
+	"github.com/ontio/wagon/exec"
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/config"
 	"github.com/saveio/themis/core/types"
@@ -29,7 +30,6 @@ import (
 	"github.com/saveio/themis/smartcontract/event"
 	"github.com/saveio/themis/smartcontract/states"
 	"github.com/saveio/themis/smartcontract/storage"
-	"github.com/ontio/wagon/exec"
 )
 
 type WasmVmService struct {
@@ -150,7 +150,7 @@ func (this *WasmVmService) Invoke() (interface{}, error) {
 
 	var output []byte
 	if this.JitMode {
-		output, err = invokeJit(this, contract, wasmCode)
+		// output, err = invokeJit(this, contract, wasmCode)
 	} else {
 		output, err = invokeInterpreter(this, contract, wasmCode)
 	}

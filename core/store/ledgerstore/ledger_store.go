@@ -53,7 +53,6 @@ import (
 	"github.com/saveio/themis/smartcontract/event"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 	"github.com/saveio/themis/smartcontract/service/neovm"
-	"github.com/saveio/themis/smartcontract/service/wasmvm"
 	sstate "github.com/saveio/themis/smartcontract/states"
 	"github.com/saveio/themis/smartcontract/storage"
 	types2 "github.com/saveio/themis/vm/neovm/types"
@@ -1279,11 +1278,11 @@ func (this *LedgerStoreImp) PreExecuteContractWithParam(tx *types.Transaction, p
 		deploy := tx.Payload.(*payload.DeployCode)
 
 		if deploy.VmType() == payload.WASMVM_TYPE {
-			wasmCode := deploy.GetRawCode()
-			err := wasmvm.WasmjitValidate(wasmCode)
-			if err != nil {
-				return stf, err
-			}
+			// wasmCode := deploy.GetRawCode()
+			// err := wasmvm.WasmjitValidate(wasmCode)
+			// if err != nil {
+			// 	return stf, err
+			// }
 		} else {
 			wasmMagicversion := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
 
