@@ -19,7 +19,7 @@ func FsManageUserSpace(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] userSpaceParams deserialize error!")
 	}
 	if !native.ContextRef.CheckWitness(userSpaceParams.WalletAddr) {
-		return utils.BYTE_FALSE, errors.NewErr("FS UserSpace] FsManageUserSpace CheckWitness failed!")
+		return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] FsManageUserSpace CheckWitness failed!")
 	}
 	newUserSpace, state, updatedFiles, err := getUserspaceChange(native, &userSpaceParams)
 	if err != nil {
@@ -83,6 +83,94 @@ func FsGetUserSpace(native *native.NativeService) ([]byte, error) {
 		return EncRet(false, []byte("[FS Userspace] FsGetUserSpace userspace serialize error!")), nil
 	}
 	return EncRet(true, bf.Bytes()), nil
+}
+
+func FsDeleteUserSpace(native *native.NativeService) ([]byte, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	source := common.NewZeroCopySource(native.Input)
+	walletAddr, err := utils.DecodeAddress(source)
+	if err != nil {
+		return EncRet(false, []byte("[FS UserSpace] FsDeleteUserSpace DecodeAddress error!")), nil
+	}
+
+	if !native.ContextRef.CheckWitness(walletAddr) {
+		return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] FsDeleteUserSpace CheckWitness failed!")
+	}
+
+	userspace, err := getUserSpace(native, walletAddr)
+	if err != nil {
+		return EncRet(false, []byte("[FS UserSpace] FsGetUserSpace GetUserSpace error!")), nil
+	}
+
+	// allow to delete user space if no file in userspace or when user space has expired for at least one prove interval
+	if userspace.Used == 0 && userspace.Balance > 0 {
+		err = appCallTransfer(native, utils.UsdtContractAddress, contract, walletAddr, userspace.Balance)
+		if err != nil {
+			return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] FsDeleteUserSpace AppCallTransfer, transfer error!")
+		}
+	} else if userspace.ExpireHeight < uint64(native.Height) {
+		err = deleteExpiredUserSpace(native, userspace, walletAddr)
+		if err != nil {
+			return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] FsDeleteUserSpace deleteExpiredUserSpace error!")
+		}
+	} else {
+		return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] FsDeleteUserSpace user space not expired!")
+	}
+
+	return utils.BYTE_TRUE, nil
+}
+
+func deleteExpiredUserSpace(native *native.NativeService, userspace *UserSpace, walletAddr common.Address) error {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+	fsSetting, err := getFsSetting(native)
+	if err != nil {
+		return errors.NewErr("[Fs UserSpace] deleteExpiredUserSpace getFsSetting error!")
+	}
+
+	// dont allow to delete userspace for one prove interval after expire in order to let fs server has enough time
+	// to submit last file prove
+	if fsSetting.DefaultProvePeriod+userspace.ExpireHeight > uint64(native.Height) {
+		return errors.NewErr("[Fs UserSpace] cannot delete userspace when expired less than prove interval !")
+	}
+
+	// file list include files that no last pdp is submitted
+	fileList, err := GetFsFileList(native, walletAddr)
+	if err != nil {
+		return errors.NewErr("[Fs UserSpace] deleteExpiredUserSpace GetFsFileList error!")
+	}
+
+	sType := []int{FileStorageTypeUseSpace}
+	deletedFiles, amount, err := deleteExpiredFilesFromList(native, fileList, walletAddr, sType)
+	if err != nil {
+		return errors.NewErr("[Fs UserSpace] deleteExpiredUserSpace deleteExpiredFilesFromList error!")
+	}
+	log.Debugf("deleteExpiredUserSpace for %s from fileList, deletedFiles count %d, amount %d",
+		walletAddr, len(deletedFiles), amount)
+
+	unsettledList, err := GetFsUnSettledList(native, walletAddr)
+	if err != nil {
+		return errors.NewErr("[Fs UserSpace] deleteExpiredUserSpace GetUserUnSettledFileList error!")
+	}
+
+	deletedFiles, amount, err = deleteExpiredFilesFromList(native, unsettledList, walletAddr, sType)
+	if err != nil {
+		return errors.NewErr("[Fs UserSpace] deleteExpiredUserSpace deleteExpiredFilesFromList error!")
+	}
+
+	log.Debugf("deleteExpiredUserSpace for %s from unSettleList, deletedFiles count %d, amount %d",
+		walletAddr, len(deletedFiles), amount)
+
+	for _, fileHash := range deletedFiles {
+		unsettledList.Del(fileHash)
+	}
+
+	err = setFsFileList(native, GenFsUnSettledListKey(contract, walletAddr), unsettledList)
+	if err != nil {
+		return errors.NewErr("[Fs UserSpace] deleteExpiredUserSpace setFsFileList error!")
+	}
+
+	return nil
 }
 
 func getUserspaceChange(native *native.NativeService, userSpaceParams *UserSpaceParams) (*UserSpace, *usdt.State, []*FileInfo, error) {

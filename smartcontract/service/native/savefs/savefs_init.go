@@ -59,6 +59,7 @@ func RegisterFsContract(native *native.NativeService) {
 	native.Register(FS_MANAGE_USER_SPACE, FsManageUserSpace)
 	native.Register(FS_GET_USER_SPACE, FsGetUserSpace)
 	native.Register(FS_GET_USER_SPACE_COST, FsGetUpdateCost)
+	native.Register(FS_DELETE_USER_SPACE, FsDeleteUserSpace)
 	native.Register(FS_GET_UNPROVE_PRIMARY_FILES, FsGetUnProvePrimaryFiles)
 	native.Register(FS_GET_UNPROVE_CANDIDATE_FILES, FsGetUnProveCandidateFiles)
 
@@ -68,6 +69,9 @@ func RegisterFsContract(native *native.NativeService) {
 	native.Register(FS_DELETE_FILE_IN_SECTOR, FsDeleteFileInSector)
 	native.Register(FS_GET_SECTORS_FOR_NODE, FsGetSectorsForNode)
 	native.Register(FS_SECTOR_PROVE, FsSectorProve)
+
+	native.Register(FS_GET_USER_UNSETTLED_FILES, FsGetUnSettledFiles)
+	native.Register(FS_DELETE_UNSETTLED_FILES, FsDeleteUnsettledFiles)
 }
 
 func FsInit(native *native.NativeService) ([]byte, error) {

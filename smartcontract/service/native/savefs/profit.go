@@ -561,6 +561,110 @@ func FsGetUnProveCandidateFiles(native *native.NativeService) ([]byte, error) {
 	return EncRet(true, bf.Bytes()), nil
 }
 
+func FsGetUnSettledFiles(native *native.NativeService) ([]byte, error) {
+	source := common.NewZeroCopySource(native.Input)
+	walletAddr, err := utils.DecodeAddress(source)
+	if err != nil {
+		return EncRet(false, []byte("[FS Profit] FsGetUnSettledFiles DecodeAddress error!")), nil
+	}
+	unsettledList, err := GetFsUnSettledList(native, walletAddr)
+	if err != nil {
+		return EncRet(false, []byte("[FS Profit] FsGetUnSettledFiles GetFsFileList error!")), nil
+	}
+	bf := new(bytes.Buffer)
+	err = unsettledList.Serialize(bf)
+	if err != nil {
+		return EncRet(false, []byte("[FS Profit] FsGetUnSettledFiles FileList Serialize error!")), nil
+	}
+	return EncRet(true, bf.Bytes()), nil
+}
+
+// delete unsettled files and give backup remaining deposit
+func FsDeleteUnsettledFiles(native *native.NativeService) ([]byte, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	source := common.NewZeroCopySource(native.Input)
+	walletAddr, err := utils.DecodeAddress(source)
+	if err != nil {
+		return EncRet(false, []byte("[FS Profit] FsDeleteUnSettledFiles DecodeAddress error!")), nil
+	}
+
+	unsettledList, err := GetFsUnSettledList(native, walletAddr)
+	if err != nil {
+		return EncRet(false, []byte("[FS Profit] FsDeleteUnSettledFiles GetFsFileList error!")), nil
+	}
+
+	sType := []int{FileStorageTypeCustom, FileStorageTypeUseSpace}
+	deletedFiles, amount, err := deleteExpiredFilesFromList(native, unsettledList, walletAddr, sType)
+	if err != nil {
+		return EncRet(false, []byte("[FS Profit] FsDeleteUnSettledFiles deleteExpiredFilesFromList error!")), nil
+	}
+
+	log.Debugf("FsDeleteUnsettledFiles for %s, deletedFiles count %d, amount %d",
+		walletAddr, len(deletedFiles), amount)
+
+	// removed deleted files from unsettle list
+	for _, fileHash := range deletedFiles {
+		unsettledList.Del(fileHash)
+	}
+
+	err = setFsFileList(native, GenFsUnSettledListKey(contract, walletAddr), unsettledList)
+	if err != nil {
+		return EncRet(false, []byte("[FS Profit] FsDeleteUnSettledFiles setFsFileList error!")), nil
+	}
+	return utils.BYTE_TRUE, nil
+}
+
+func deleteExpiredFilesFromList(native *native.NativeService, fileList *FileList, walletAddr common.Address,
+	storageTypes []int) ([][]byte, uint64, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+	fsSetting, err := getFsSetting(native)
+	if err != nil {
+		return nil, 0, errors.NewErr("[FS Profit] deleteExpiredFiles getFsSetting error!")
+	}
+
+	deletedFiles := make([][]byte, 0)
+	height := uint64(native.Height)
+	amount := uint64(0)
+	for _, file := range fileList.List {
+		fileInfo, err := getFsFileInfo(native, file.Hash)
+		if err != nil {
+			return nil, 0, errors.NewErr("[FS Profit] deleteExpiredFiles getFsFileInfo error!")
+		}
+
+		match := false
+		// check if type as expected
+		for _, sType := range storageTypes {
+			if int(fileInfo.StorageType) == sType {
+				match = true
+				break
+			}
+		}
+
+		if !match {
+			continue
+		}
+
+		// check if file is not proved after expired for a prove interval
+		if fileInfo.ExpiredHeight+fsSetting.DefaultProvePeriod > height {
+			continue
+		}
+
+		amount += fileInfo.Deposit
+		cleanupForDeleteFile(native, fileInfo, true, true)
+		deletedFiles = append(deletedFiles, file.Hash)
+	}
+
+	if amount > 0 {
+		err = appCallTransfer(native, utils.UsdtContractAddress, contract, walletAddr, amount)
+		if err != nil {
+			return nil, 0, errors.NewErr("[FS Profit] FsDeleteUnSettledFiles AppCallTransfer error error!")
+		}
+	}
+
+	return deletedFiles, amount, nil
+}
+
 func deleteFiles(native *native.NativeService, fileInfos []*FileInfo) error {
 	if len(fileInfos) == 0 {
 		return nil

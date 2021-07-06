@@ -499,7 +499,7 @@ func settleForFile(native *native.NativeService, fileInfo *FileInfo, nodeInfo *F
 
 	nodeInfo.Profit += profit
 	if err = setFsNodeInfo(native, nodeInfo); err != nil {
-		return errors.NewErr("setFsNodeInfo error:" + err.Error())
+		return errors.NewErr("[FS Govern] setFsNodeInfo error:" + err.Error())
 	}
 
 	fileInfo.Deposit -= profit
@@ -528,10 +528,19 @@ func settleForFile(native *native.NativeService, fileInfo *FileInfo, nodeInfo *F
 		if fileInfo.Deposit > 0 {
 			err = appCallTransfer(native, utils.UsdtContractAddress, contract, fileInfo.FileOwner, fileInfo.Deposit)
 			if err != nil {
-				return errors.NewErr("[SectorProve] AppCallTransfer, transfer error!")
+				return errors.NewErr("[FS Govern] AppCallTransfer, transfer error!")
 			}
 		}
 		cleanupForDeleteFile(native, fileInfo, true, false)
+		err = DelFileFromUnSettledList(native, fileInfo.FileOwner, fileInfo.FileHash)
+		if err != nil {
+			return errors.NewErr("[FS Govern] DelFileFromUnSettledList error!")
+		}
+	} else {
+		err = AddFileToUnSettleList(native, fileInfo.FileOwner, fileInfo.FileHash)
+		if err != nil {
+			return errors.NewErr("[FS Govern] AddFileToUnSettleList error!")
+		}
 	}
 
 	ProveFileEvent(native, fileInfo.FileHash, nodeInfo.WalletAddr, profit)

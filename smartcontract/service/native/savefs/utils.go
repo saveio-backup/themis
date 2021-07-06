@@ -65,6 +65,7 @@ const (
 	FS_MANAGE_USER_SPACE           = "FsManageUserSpace"
 	FS_GET_USER_SPACE              = "FsGetUserSpace"
 	FS_GET_USER_SPACE_COST         = "FsGetUpdateCost"
+	FS_DELETE_USER_SPACE           = "FsDeleteUserSpace"
 	FS_GET_UNPROVE_PRIMARY_FILES   = "FsGetUnProvePrimaryFiles"
 	FS_GET_UNPROVE_CANDIDATE_FILES = "FsGetUnProveCandidateFiles"
 	FS_CREATE_SECTOR               = "FsCreateSector"
@@ -73,6 +74,8 @@ const (
 	FS_DELETE_FILE_IN_SECTOR       = "FsDeleteFileInSector"
 	FS_GET_SECTORS_FOR_NODE        = "FsGetSectorsForNode"
 	FS_SECTOR_PROVE                = "FsSectorProve"
+	FS_GET_USER_UNSETTLED_FILES    = "FsGetUserUnsettledFiles"
+	FS_DELETE_UNSETTLED_FILES      = "FsWithdrawUnsettledFiles"
 )
 
 const (
@@ -87,6 +90,7 @@ const (
 	SAVEFS_USER_SPACE                 = "savefsuserspace"
 	SAVEFS_PRIMARY_FILE_LIST          = "savefsprimaryfilelist"
 	SAVEFS_CANDIDATE_FILE_LIST        = "savefscandidatefilelist"
+	SAVEFS_UNSETTLED_FILE_LIST        = "savefsunsettledfilelist"
 	SAVEFS_SECTOR_INFO                = "savefssectorinfo"
 	SAVEFS_SECTOR_FILE_INFO_GROUP     = "savefssectorfileinfogroup"
 	SAVEFS_SECTOR_FILE_INFO_GROUP_NUM = "savefsnumofsectorfileinfogroup"
@@ -291,6 +295,11 @@ func GenFsFilePrimaryListKey(contract common.Address, walletAddr common.Address)
 
 func GenFsFileCandidateListKey(contract common.Address, walletAddr common.Address) []byte {
 	key := append(contract[:], SAVEFS_CANDIDATE_FILE_LIST...)
+	return append(key, walletAddr[:]...)
+}
+
+func GenFsUnSettledListKey(contract common.Address, walletAddr common.Address) []byte {
+	key := append(contract[:], SAVEFS_UNSETTLED_FILE_LIST...)
 	return append(key, walletAddr[:]...)
 }
 

@@ -199,6 +199,28 @@ func GetFsFileCandidateList(native *native.NativeService, walletAddr common.Addr
 	contract := native.ContextRef.CurrentContext().ContractAddress
 	fileListKey := GenFsFileCandidateListKey(contract, walletAddr)
 	return getFsFileList(native, fileListKey)
+
+}
+
+// UnSettled file list saves files which has at least one node submitted last prove, but not all proves are submitted
+// this kind of files can be deleted when all nodes finish last prove or by user with deleteUnsettledFiles after one
+// prove interval of file expire
+func AddFileToUnSettleList(native *native.NativeService, walletAddr common.Address, fileHash []byte) error {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+	fileListKey := GenFsUnSettledListKey(contract, walletAddr)
+	return addFileToList(native, fileListKey, walletAddr, fileHash)
+}
+
+func DelFileFromUnSettledList(native *native.NativeService, walletAddr common.Address, fileHash []byte) error {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+	fileListKey := GenFsUnSettledListKey(contract, walletAddr)
+	return delFileFromList(native, fileListKey, walletAddr, fileHash)
+}
+
+func GetFsUnSettledList(native *native.NativeService, walletAddr common.Address) (*FileList, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+	fileListKey := GenFsUnSettledListKey(contract, walletAddr)
+	return getFsFileList(native, fileListKey)
 }
 
 func addFileToList(native *native.NativeService, fileListKey []byte, walletAddr common.Address, fileHash []byte) error {
@@ -251,4 +273,14 @@ func getFsFileList(native *native.NativeService, fileListKey []byte) (*FileList,
 		return nil, errors.NewErr("[FS Profit] FsFileList deserialize error!")
 	}
 	return &fsFileList, nil
+}
+
+func setFsFileList(native *native.NativeService, fileListKey []byte, fileList *FileList) error {
+	fileListBf := new(bytes.Buffer)
+	err := fileList.Serialize(fileListBf)
+	if err != nil {
+		return errors.NewErr("[FS Profit] FsSetFileList fileList serialize error!")
+	}
+	utils.PutBytes(native, fileListKey, fileListBf.Bytes())
+	return nil
 }
