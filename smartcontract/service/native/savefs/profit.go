@@ -190,6 +190,7 @@ func FsStoreFile(native *native.NativeService) ([]byte, error) {
 		log.Debugf("use transfer\n")
 		err = appCallTransfer(native, utils.UsdtContractAddress, fileInfo.FileOwner, contract, fileInfo.Deposit)
 		if err != nil {
+			log.Errorf("transfer error from %s, to %s, amount %v, err %v", fileInfo.FileOwner, contract, fileInfo.Deposit, err)
 			return utils.BYTE_FALSE, errors.NewErr("[FS Profit] AppCallTransfer, transfer error!")
 		}
 		fileInfo.StorageType = FileStorageTypeCustom
