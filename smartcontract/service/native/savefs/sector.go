@@ -220,7 +220,7 @@ func FsSectorProve(native *native.NativeService) ([]byte, error) {
 
 	if !ret {
 		log.Errorf("checkSectorProve not success")
-		err = punishForSector(native, sectorInfo, nodeInfo, fsSetting)
+		err = punishForSector(native, sectorInfo, nodeInfo, fsSetting, 1)
 		if err != nil {
 			return utils.BYTE_FALSE, errors.NewErr("[SectorProve] PunishForSector error!")
 		}
@@ -244,6 +244,72 @@ func FsSectorProve(native *native.NativeService) ([]byte, error) {
 	err = setSectorInfo(native, sectorInfo)
 	if err != nil {
 		return utils.BYTE_FALSE, errors.NewErr("[SectorProve] updateNextProveHeight error!")
+	}
+
+	return utils.BYTE_TRUE, nil
+}
+
+// check if node has submitted sector prove in time, if not sector will be punished
+func FsCheckNodeSectorProvedInTime(native *native.NativeService) ([]byte, error) {
+	var sectorRef SectorRef
+	source := common.NewZeroCopySource(native.Input)
+	if err := sectorRef.Deserialization(source); err != nil {
+		return utils.BYTE_FALSE, errors.NewErr("[SectorInfo] SectorRef deserialize error!")
+	}
+
+	nodeAddr := sectorRef.NodeAddr
+	sectorID := sectorRef.SectorID
+
+	nodeInfo, err := getFsNodeInfo(native, nodeAddr)
+	if err != nil {
+		return utils.BYTE_FALSE, errors.NewErr("[CheckSectorProved] NodeInfo not found!")
+	}
+
+	if nodeInfo.ServiceTime < uint64(native.Time) {
+		return utils.BYTE_FALSE, errors.NewErr("[CheckSectorProved] NodeInfo service time expired!")
+	}
+
+	if sectorRef.SectorID == 0 {
+		return utils.BYTE_FALSE, errors.NewErr("[CheckSectorProved]  sector id is 0!")
+	}
+
+	sectorInfo, err := getSectorInfo(native, nodeAddr, sectorID)
+	if err != nil {
+		return utils.BYTE_FALSE, errors.NewErr("[CheckSectorProved] sector not exist!")
+	}
+
+	// sector with no files no need to check
+	if sectorInfo.FileNum == 0 {
+		return utils.BYTE_FALSE, errors.NewErr("[CheckSectorProved] sector has no file!")
+	}
+
+	fsSetting, err := getFsSettingWithProveLevel(native, sectorInfo.ProveLevel)
+	if err != nil {
+		return utils.BYTE_FALSE, errors.NewErr("[CheckSectorProved] getFsSetting error!")
+	}
+
+	height := uint64(native.Height)
+	if sectorInfo.NextProveHeight+fsSetting.DefaultProvePeriod < height {
+		return utils.BYTE_FALSE, errors.NewErr("[CheckSectorProved] sector prove not expire!")
+	}
+
+	// check if sector has been punished already, should not punish again
+	// punish node for sector, may give reward to contract caller
+	lastHeight, err := getLastPunishmentHeightForNode(native, nodeAddr, sectorID)
+	if err != nil {
+		return utils.BYTE_FALSE, errors.NewErr("[CheckSectorProved] getLastPunishmentHeight error!")
+	}
+
+	log.Debugf("last punishment height for node %s sector %d is %d", nodeAddr, sectorID, lastHeight)
+
+	// punish should take times of missing sector prove into account
+	times := calMissingSectorProveTimes(sectorInfo, fsSetting, lastHeight, height)
+	if times == 0 {
+		return utils.BYTE_FALSE, errors.NewErr("[CheckSectorProved] node has been punished")
+	}
+
+	if err = punishForSector(native, sectorInfo, nodeInfo, fsSetting, times); err != nil {
+		return utils.BYTE_FALSE, errors.NewErr("[CheckSectorProved] punish for sector error!")
 	}
 
 	return utils.BYTE_TRUE, nil
@@ -440,40 +506,4 @@ func profitSplitForSector(native *native.NativeService, sectorInfo *SectorInfo, 
 	}
 
 	return nil
-}
-
-// when sector prove not ok,
-func punishForSector(native *native.NativeService, sectorInfo *SectorInfo, nodeInfo *FsNodeInfo, fsSetting *FsSetting) error {
-	contract := native.ContextRef.CurrentContext().ContractAddress
-
-	amount := calPunishmentForOneSectorProve(fsSetting, sectorInfo)
-
-	log.Debugf("punish for sector, amount %d, node pledge %d", amount, nodeInfo.Pledge)
-
-	if nodeInfo.Pledge >= amount {
-		nodeInfo.Pledge -= amount
-	} else {
-		nodeInfo.Pledge = 0
-		amount = nodeInfo.Pledge
-	}
-
-	if amount > 0 {
-		err := appCallTransfer(native, utils.UsdtContractAddress, nodeInfo.WalletAddr, contract, amount)
-		if err != nil {
-			return errors.NewErr("[SectorProve] appCallTransfer, transfer error!")
-		}
-
-		if err := setFsNodeInfo(native, nodeInfo); err != nil {
-			return errors.NewErr("[SectorProve] punishForSector setNodeInfo error!")
-		}
-	}
-
-	return nil
-}
-
-// when sector prove failed, we consider all files prove failed, so take sector.used to calculate profit
-// and take it as punishment
-func calPunishmentForOneSectorProve(fsSetting *FsSetting, sectorInfo *SectorInfo) uint64 {
-	punishFactor := uint64(2)
-	return punishFactor * calcSingleValidFeeForFile(fsSetting, sectorInfo.Used)
 }

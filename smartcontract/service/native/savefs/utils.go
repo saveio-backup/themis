@@ -39,43 +39,44 @@ const (
 	FileStoreTypeProfessional
 )
 const (
-	FS_INIT                        = "FsInit"
-	FS_GETSETTING                  = "FsGetSetting"
-	FS_GETSTORAGEFEE               = "FsGetStorageFee"
-	FS_NODE_REGISTER               = "FsNodeRegister"
-	FS_NODE_QUERY                  = "FsNodeQuery"
-	FS_NODE_UPDATE                 = "FsNodeUpdate"
-	FS_NODE_CANCEL                 = "FsNodeCancel"
-	FS_GET_NODE_LIST               = "FsGetNodeList"
-	FS_GET_NODE_LIST_BY_ADDRS      = "FsGetNodeListByAddrs"
-	FS_STORE_FILE                  = "FsStoreFile"
-	FS_GET_FILE_INFO               = "FsGetFileInfo"
-	FS_GET_FILE_INFOS              = "FsGetFileInfos"
-	FS_GET_FILE_LIST               = "FsGetFileList"
-	FS_NODE_WITH_DRAW_PROFIT       = "FsNodeWithDrawProfit"
-	FS_FILE_PROVE                  = "FsFileProve"
-	FS_GET_FILE_PROVE_DETAILS      = "FsGetFileProveDetails"
-	FS_DELETE_FILE                 = "FsDeleteFile"
-	FS_DELETE_FILES                = "FsDeleteFiles"
-	FS_CHANGE_FILE_OWNER           = "FsChangeFileOwner"
-	FS_WHITE_LIST_OP               = "FsWhiteListOp"
-	FS_GET_WHITE_LIST              = "FsGetWhiteList"
-	FS_FILE_RENEW                  = "FsFileRenew"
-	FS_CHANGE_FILE_PRIVILEGE       = "FsChangeFilePrivilege"
-	FS_MANAGE_USER_SPACE           = "FsManageUserSpace"
-	FS_GET_USER_SPACE              = "FsGetUserSpace"
-	FS_GET_USER_SPACE_COST         = "FsGetUpdateCost"
-	FS_DELETE_USER_SPACE           = "FsDeleteUserSpace"
-	FS_GET_UNPROVE_PRIMARY_FILES   = "FsGetUnProvePrimaryFiles"
-	FS_GET_UNPROVE_CANDIDATE_FILES = "FsGetUnProveCandidateFiles"
-	FS_CREATE_SECTOR               = "FsCreateSector"
-	FS_GET_SECTOR_INFO             = "FsGetSectorInfo"
-	FS_DELETE_SECTOR_INFO          = "FsDeleteSectorInfo"
-	FS_DELETE_FILE_IN_SECTOR       = "FsDeleteFileInSector"
-	FS_GET_SECTORS_FOR_NODE        = "FsGetSectorsForNode"
-	FS_SECTOR_PROVE                = "FsSectorProve"
-	FS_GET_USER_UNSETTLED_FILES    = "FsGetUserUnsettledFiles"
-	FS_DELETE_UNSETTLED_FILES      = "FsWithdrawUnsettledFiles"
+	FS_INIT                            = "FsInit"
+	FS_GETSETTING                      = "FsGetSetting"
+	FS_GETSTORAGEFEE                   = "FsGetStorageFee"
+	FS_NODE_REGISTER                   = "FsNodeRegister"
+	FS_NODE_QUERY                      = "FsNodeQuery"
+	FS_NODE_UPDATE                     = "FsNodeUpdate"
+	FS_NODE_CANCEL                     = "FsNodeCancel"
+	FS_GET_NODE_LIST                   = "FsGetNodeList"
+	FS_GET_NODE_LIST_BY_ADDRS          = "FsGetNodeListByAddrs"
+	FS_STORE_FILE                      = "FsStoreFile"
+	FS_GET_FILE_INFO                   = "FsGetFileInfo"
+	FS_GET_FILE_INFOS                  = "FsGetFileInfos"
+	FS_GET_FILE_LIST                   = "FsGetFileList"
+	FS_NODE_WITH_DRAW_PROFIT           = "FsNodeWithDrawProfit"
+	FS_FILE_PROVE                      = "FsFileProve"
+	FS_GET_FILE_PROVE_DETAILS          = "FsGetFileProveDetails"
+	FS_DELETE_FILE                     = "FsDeleteFile"
+	FS_DELETE_FILES                    = "FsDeleteFiles"
+	FS_CHANGE_FILE_OWNER               = "FsChangeFileOwner"
+	FS_WHITE_LIST_OP                   = "FsWhiteListOp"
+	FS_GET_WHITE_LIST                  = "FsGetWhiteList"
+	FS_FILE_RENEW                      = "FsFileRenew"
+	FS_CHANGE_FILE_PRIVILEGE           = "FsChangeFilePrivilege"
+	FS_MANAGE_USER_SPACE               = "FsManageUserSpace"
+	FS_GET_USER_SPACE                  = "FsGetUserSpace"
+	FS_GET_USER_SPACE_COST             = "FsGetUpdateCost"
+	FS_DELETE_USER_SPACE               = "FsDeleteUserSpace"
+	FS_GET_UNPROVE_PRIMARY_FILES       = "FsGetUnProvePrimaryFiles"
+	FS_GET_UNPROVE_CANDIDATE_FILES     = "FsGetUnProveCandidateFiles"
+	FS_CREATE_SECTOR                   = "FsCreateSector"
+	FS_GET_SECTOR_INFO                 = "FsGetSectorInfo"
+	FS_DELETE_SECTOR_INFO              = "FsDeleteSectorInfo"
+	FS_DELETE_FILE_IN_SECTOR           = "FsDeleteFileInSector"
+	FS_GET_SECTORS_FOR_NODE            = "FsGetSectorsForNode"
+	FS_SECTOR_PROVE                    = "FsSectorProve"
+	FS_CHECK_NODE_SECTOR_PROVED_INTIME = "FsCheckNodeSectorProvedInTime"
+	FS_GET_USER_UNSETTLED_FILES        = "FsGetUserUnsettledFiles"
+	FS_DELETE_UNSETTLED_FILES          = "FsDeleteUnsettledFiles"
 )
 
 const (
@@ -94,6 +95,7 @@ const (
 	SAVEFS_SECTOR_INFO                = "savefssectorinfo"
 	SAVEFS_SECTOR_FILE_INFO_GROUP     = "savefssectorfileinfogroup"
 	SAVEFS_SECTOR_FILE_INFO_GROUP_NUM = "savefsnumofsectorfileinfogroup"
+	SAVEFS_SECTOR_PUNISHMENT_HEIGHT   = "savefssectorpunishmentheight"
 )
 const (
 	FS_GAS_PRICE           = 1
@@ -327,6 +329,13 @@ func GenFsSectorFileInfoGroupKey(contract common.Address, nodeAddr common.Addres
 
 func GenFsSectorFileInfoGroupNumKey(contract common.Address, nodeAddr common.Address, sectorID uint64) []byte {
 	key := append(contract[:], SAVEFS_SECTOR_FILE_INFO_GROUP_NUM...)
+	key = append(key[:], nodeAddr[:]...)
+	key = append(key[:], util.Int64ToBytes(sectorID)...)
+	return key
+}
+
+func GenFsNodeSectorPunishmentKey(contract common.Address, nodeAddr common.Address, sectorID uint64) []byte {
+	key := append(contract[:], SAVEFS_SECTOR_PUNISHMENT_HEIGHT...)
 	key = append(key[:], nodeAddr[:]...)
 	key = append(key[:], util.Int64ToBytes(sectorID)...)
 	return key
