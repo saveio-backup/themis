@@ -532,10 +532,6 @@ func settleForFile(native *native.NativeService, fileInfo *FileInfo, nodeInfo *F
 			}
 		}
 		cleanupForDeleteFile(native, fileInfo, true, false)
-		err = DelFileFromUnSettledList(native, fileInfo.FileOwner, fileInfo.FileHash)
-		if err != nil {
-			return errors.NewErr("[FS Govern] DelFileFromUnSettledList error!")
-		}
 	} else {
 		err = AddFileToUnSettleList(native, fileInfo.FileOwner, fileInfo.FileHash)
 		if err != nil {

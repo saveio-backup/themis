@@ -785,15 +785,16 @@ func cleanupForDeleteFile(native *native.NativeService, fileInfo *FileInfo, rmIn
 	if rmInfo {
 		deleteFsFileInfo(native, fileHash)
 		deleteProveDetails(native, fileHash)
+		DelFileFromUnSettledList(native, fileInfo.FileOwner, fileHash)
 	}
 
 	if rmList {
-		DelFileFromList(native, fileInfo.FileOwner, fileInfo.FileHash)
+		DelFileFromList(native, fileInfo.FileOwner, fileHash)
 		for _, primaryWalletAddr := range fileInfo.PrimaryNodes.AddrList {
-			DelFileFromPrimaryList(native, primaryWalletAddr, fileInfo.FileHash)
+			DelFileFromPrimaryList(native, primaryWalletAddr, fileHash)
 		}
 		for _, candidateWalletAddr := range fileInfo.CandidateNodes.AddrList {
-			DelFileFromCandidateList(native, candidateWalletAddr, fileInfo.FileHash)
+			DelFileFromCandidateList(native, candidateWalletAddr, fileHash)
 		}
 	}
 }
