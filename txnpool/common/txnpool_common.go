@@ -22,6 +22,7 @@ import (
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/core/types"
 	"github.com/saveio/themis/errors"
+	gov "github.com/saveio/themis/smartcontract/service/native/governance"
 )
 
 const (
@@ -47,6 +48,7 @@ const (
 	TxActor                  // Actor that handles new transaction
 	TxPoolActor              // Actor that handles consensus msg
 	VerifyRspActor           // Actor that handles the response from valdiators
+	NetActor                 // Actor to send msg to the net actor
 	MaxActor
 )
 
@@ -57,6 +59,7 @@ const (
 	NilSender  SenderType = iota
 	NetSender             // Net sends tx req
 	HttpSender            // Http sends tx req
+	PoCSender             // PoC Consensus sends poc
 )
 
 func (sender SenderType) Sender() string {
@@ -200,6 +203,25 @@ type GetPendingTxnHashReq struct {
 type GetPendingTxnHashRsp struct {
 	TxHashs []common.Uint256
 }
+
+// PoCReq specifies the api that how to submit a poc param
+// Input: poc param and submitter type
+type PoCReq struct {
+	Param  *gov.SubmitNonceParam
+	Sender SenderType
+}
+
+// consensus messages
+// GetPoCReq specifies the api that how to get the winner PoC puzzle result
+type GetPoCReq struct {
+	View uint32
+}
+
+// GetPoCRsp returns a PoC Param for GetPoCReq.
+type GetPoCRsp struct {
+	Param *gov.SubmitNonceParam
+}
+
 
 // consensus messages
 // GetTxnPoolReq specifies the api that how to get the valid transaction list.

@@ -115,8 +115,9 @@ const (
 	FINDNODE_RESP_TYPE = "findnodeack" // find node using dht
 	UPDATE_KADID_TYPE  = "updatekadid" //update node kadid
 
-	GET_SUBNET_MEMBERS_TYPE = "getmembers" // request subnet members
-	SUBNET_MEMBERS_TYPE     = "members"    // response subnet members
+	GET_SUBNET_MEMBERS_TYPE = "getmembers"       // request subnet members
+	SUBNET_MEMBERS_TYPE     = "members"          // response subnet members
+	SUBMIT_NONECE_PARAM     = "submitnonceparam" // submit nonce param
 )
 
 //ParseIPAddr return ip address
@@ -124,3 +125,8 @@ func ParseIPAddr(s string) (string, error) {
 	host, _, err := net.SplitHostPort(s)
 	return host, err
 }
+
+//actor const
+const (
+	ACTOR_TIMEOUT = 5 //actor request timeout in secs
+)

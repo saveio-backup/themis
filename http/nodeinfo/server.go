@@ -29,7 +29,6 @@ import (
 	"github.com/saveio/themis/common/config"
 	"github.com/saveio/themis/core/ledger"
 	p2p "github.com/saveio/themis/p2pserver/net/protocol"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Info struct {
@@ -61,6 +60,7 @@ func newNgbNodeInfo(ngbId string, ngbType string, ngbAddr string, httpInfoAddr s
 }
 
 func initPageInfo(blockHeight uint32, curNodeType string, ngbrCnt int, ngbrsInfo []NgbNodeInfo) (*Info, error) {
+
 	id := fmt.Sprintf("0x%x", node.GetID())
 	return &Info{NodeVersion: config.Version, BlockHeight: blockHeight,
 		NeighborCnt: ngbrCnt, Neighbors: ngbrsInfo,
@@ -91,7 +91,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 		ngbInfoPort = ngbrNoders[i].GetHttpInfoPort()
 		ngbHttpInfoAddr = ngbAddr + ":" + strconv.Itoa(int(ngbInfoPort))
 		ngbId = fmt.Sprintf("0x%x", ngbrNoders[i].GetID())
-		ngbVersion = ngbrNoders[i].GetSoftVersion()
+		ngbVersion = fmt.Sprintf("%v", ngbrNoders[i].GetVersion())
 
 		ngbrInfo := newNgbNodeInfo(ngbId, ngbType, ngbAddr, ngbHttpInfoAddr, ngbInfoPort, ngbVersion)
 		ngbrNodersInfo = append(ngbrNodersInfo, *ngbrInfo)
@@ -114,15 +114,6 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
 func StartServer(n p2p.P2P) {
 	node = n
 	port := int(config.DefConfig.P2PNode.HttpInfoPort)
-
 	http.HandleFunc("/info", viewHandler)
-	// prom related
-	if err := initMetric(); err != nil {
-		panic("init prometheus metrics fail")
-	}
-
-	http.Handle("/metrics", promhttp.Handler())
-	go updateMetric(n)
-
 	http.ListenAndServe(":"+strconv.Itoa(port), nil)
 }

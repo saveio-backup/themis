@@ -42,6 +42,7 @@ import (
 	"github.com/saveio/themis/p2pserver/protocols/reconnect"
 	"github.com/saveio/themis/p2pserver/protocols/subnet"
 	"github.com/saveio/themis/p2pserver/protocols/utils"
+	gov "github.com/saveio/themis/smartcontract/service/native/governance"
 )
 
 //respCache cache for some response data
@@ -173,6 +174,8 @@ func (self *MsgHandler) HandlePeerMessage(ctx *p2p.Context, msg msgTypes.Message
 		self.subnet.OnMembersRequest(ctx, m)
 	case *msgTypes.SubnetMembers:
 		self.subnet.OnMembersResponse(ctx, m)
+	case *msgTypes.SubmitNonceParam:
+		SubmitNonceParamHandle(ctx, m)
 	case *msgTypes.NotFound:
 		log.Debug("[p2p]receive notFound message, hash is ", m.Hash)
 	default:
@@ -388,6 +391,38 @@ func InvHandle(ctx *p2p.Context, inv *msgTypes.Inv) {
 		log.Warn("[p2p]receive unknown inventory message")
 	}
 
+}
+
+func SubmitNonceParamHandle(ctx *p2p.Context, msg *msgTypes.SubmitNonceParam) error {
+	remotePeer := ctx.Sender()
+
+	address, err := common.AddressFromHexString(string(msg.Address))
+	if err != nil {
+		log.Info("[p2p]client submitNonceParam, fail to parse address")
+		return err
+	}
+
+	param := &gov.SubmitNonceParam{
+		View:     msg.View,
+		Address:  address,
+		Id:       msg.Id,
+		Nonce:    msg.Nonce,
+		Deadline: msg.Deadline,
+		PlotName: msg.PlotName,
+
+		VoteConsPub: msg.VoteConsPub,
+		VoteId:      msg.VoteId,
+		VoteInfo:    msg.VoteInfo,
+
+		MoveUpElect: msg.MoveUpElect,
+	}
+
+	if remotePeer != nil {
+		remotePeer.MarkPoC(param.Hash())
+	}
+	actor.AddPoC(param)
+	log.Trace("[network]receive PoC message hash", param.Hash())
+	return nil
 }
 
 //get blk hdrs from starthash to stophash

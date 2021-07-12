@@ -121,3 +121,9 @@ func GenExportBlocksFileName(name string, start, end uint32) string {
 	}
 	return fileName
 }
+func WalletAddressToId(addr []byte) int64 {
+	bigInteger := big.NewInt(1)
+	bigInteger.SetBytes([]byte{addr[7], addr[6], addr[5], addr[4], addr[3], addr[2], addr[1], addr[0]})
+
+	return bigInteger.Int64()
+}

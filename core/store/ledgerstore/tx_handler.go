@@ -149,6 +149,13 @@ func (self *StateStore) HandleInvokeTransaction(store store.LedgerStore, overlay
 	code := invoke.Code
 	sysTransFlag := bytes.Compare(code, ninit.COMMIT_DPOS_BYTES) == 0 || block.Header.Height == 0
 
+	if !sysTransFlag {
+		if prefix := len(code) - len(ninit.SETTLE_VIEW_BYTES); prefix > 0 {
+			sysTransFlag = bytes.Compare(code[prefix:], ninit.SETTLE_VIEW_BYTES) == 0
+			log.Debugf("HandleInvokeTransaction find poc settle tx, sysTransFlag:%v", sysTransFlag)
+		}
+	}
+
 	isCharge := !sysTransFlag && tx.GasPrice != 0
 
 	// init smart contract configuration info

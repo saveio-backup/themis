@@ -64,7 +64,10 @@ func setupAPP() *cli.App {
 		utils.AccountPassFlag,
 		//consensus setting
 		utils.EnableConsensusFlag,
+		utils.EnablePoCMiningFlag,
 		utils.MaxTxInBlockFlag,
+		//poc setting
+		utils.PlotDirFlag,
 		//txpool setting
 		utils.GasPriceFlag,
 		utils.GasLimitFlag,
@@ -80,6 +83,11 @@ func setupAPP() *cli.App {
 		utils.MaxConnInBoundFlag,
 		utils.MaxConnOutBoundFlag,
 		utils.MaxConnInBoundForSingleIPFlag,
+		utils.NumPeersFlag,
+		utils.EnableProxyFlag,
+		utils.ProxyServerListFlag,
+		utils.ProxyServerIdListFlag,
+
 		//test mode setting
 		utils.EnableTestModeFlag,
 		utils.TestModeGenBlockTimeFlag,

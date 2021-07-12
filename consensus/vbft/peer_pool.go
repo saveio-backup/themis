@@ -23,8 +23,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/saveio/themis/crypto/keypair"
+	"github.com/saveio/themis/common/log"
 	vconfig "github.com/saveio/themis/consensus/vbft/config"
+	"github.com/saveio/themis/crypto/keypair"
 	"github.com/saveio/themis/p2pserver/common"
 )
 
@@ -132,7 +133,13 @@ func (pool *PeerPool) waitPeerConnected(peerIdx uint32) {
 	}
 	pool.lock.Unlock()
 
-	<-C
+	t1 := time.NewTimer(time.Second * 5)
+	select {
+	case <-C:
+		log.Debugf("waitPeerConnected peer %d connected", peerIdx)
+	case <-t1.C:
+		log.Debugf("waitPeerConnected peer %d timeout", peerIdx)
+	}
 }
 
 func (pool *PeerPool) peerConnected(peerIdx uint32) {

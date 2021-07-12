@@ -24,13 +24,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/saveio/themis/crypto/keypair"
-	"github.com/saveio/themis/crypto/signature"
 	"github.com/saveio/themis/account"
 	"github.com/saveio/themis/cmd/common"
 	"github.com/saveio/themis/cmd/utils"
 	"github.com/saveio/themis/common/password"
 	"github.com/saveio/themis/core/types"
+	"github.com/saveio/themis/crypto/keypair"
+	"github.com/saveio/themis/crypto/signature"
 	"github.com/urfave/cli"
 )
 
@@ -207,6 +207,7 @@ func accountCreate(ctx *cli.Context) error {
 		PrintInfoMsg("Index:%d", wallet.GetAccountNum())
 		PrintInfoMsg("Label:%s", label)
 		PrintInfoMsg("Address:%s", acc.Address.ToBase58())
+		PrintInfoMsg("Id(For PoC):%d", utils.WalletAddressToId([]byte(acc.Address.ToBase58())))
 		PrintInfoMsg("Public key:%s", hex.EncodeToString(keypair.SerializePublicKey(acc.PublicKey)))
 		PrintInfoMsg("Signature scheme:%s", acc.SigScheme.Name())
 	}
@@ -266,6 +267,7 @@ func accountList(ctx *cli.Context) error {
 		PrintInfoMsg("	Key length: %v bits", len(accMeta.Key)*8)
 		PrintInfoMsg("	Public key: %v", accMeta.PubKey)
 		PrintInfoMsg("	Signature scheme: %v\n", accMeta.SigSch)
+		PrintInfoMsg("	Id(For PoC):%d", utils.WalletAddressToId([]byte(accMeta.Address)))
 	}
 	return nil
 }

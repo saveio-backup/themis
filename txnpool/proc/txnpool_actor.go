@@ -32,11 +32,23 @@ import (
 	"github.com/saveio/themis/errors"
 	"github.com/saveio/themis/events/message"
 	hComm "github.com/saveio/themis/http/base/common"
+	gov "github.com/saveio/themis/smartcontract/service/native/governance"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 	"github.com/saveio/themis/smartcontract/service/neovm"
 	tc "github.com/saveio/themis/txnpool/common"
 	"github.com/saveio/themis/validator/types"
 )
+
+// TxnActor: Handle the low priority msg from P2P and API
+type TxPoolService struct {
+	server *TXPoolServer
+}
+
+// creates an actor to handle the transaction-based messages from network and http
+func NewTxPoolService(s *TXPoolServer) *TxPoolService {
+	a := &TxPoolService{server: s}
+	return a
+}
 
 // NewTxActor creates an actor to handle the transaction-based messages from
 // network and http
@@ -200,6 +212,18 @@ func (ta *TxActor) handleTransaction(sender tc.SenderType, self *actor.PID,
 	}
 }
 
+// handleTransaction handles a transaction from network and http
+func (ta *TxActor) handlePoCParam(sender tc.SenderType, self *actor.PID,
+	param *gov.SubmitNonceParam) {
+
+	if ta.server.getParam(param.Hash()) != nil {
+		log.Debugf("handlePoCParam: transaction %x already in the poc pool",
+			param.Hash())
+	} else {
+		ta.server.assignParamToWorker(param, sender)
+	}
+}
+
 // Receive implements the actor interface
 func (ta *TxActor) Receive(context actor.Context) {
 	switch msg := context.Message().(type) {
@@ -211,6 +235,12 @@ func (ta *TxActor) Receive(context actor.Context) {
 
 	case *actor.Restarting:
 		log.Warn("txpool-tx actor restarting")
+
+	case *tc.PoCReq:
+		sender := msg.Sender
+
+		log.Debugf("txpool-poc actor receives poc param from %v ", sender.Sender())
+		ta.handlePoCParam(sender, context.Self(), msg.Param)
 
 	case *tc.TxReq:
 		sender := msg.Sender
@@ -313,6 +343,16 @@ func (tpa *TxPoolActor) Receive(context actor.Context) {
 
 	case *actor.Restarting:
 		log.Warn("txpool actor Restarting")
+
+	case *tc.GetPoCReq:
+		sender := context.Sender()
+
+		log.Debugf("txpool actor receives getting poc req from %v", sender)
+
+		res := tpa.server.getPoCParam(msg.View)
+		if sender != nil {
+			sender.Request(&tc.GetPoCRsp{Param: res}, context.Self())
+		}
 
 	case *tc.GetTxnPoolReq:
 		sender := context.Sender()

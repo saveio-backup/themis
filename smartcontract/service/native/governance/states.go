@@ -43,6 +43,24 @@ func (this *Status) Deserialization(source *common.ZeroCopySource) error {
 	return nil
 }
 
+type ConsStatus uint8
+
+func (this *ConsStatus) Serialize(w io.Writer) error {
+	if err := serialization.WriteUint8(w, uint8(*this)); err != nil {
+		return fmt.Errorf("serialization.WriteUint8, serialize status error: %v", err)
+	}
+	return nil
+}
+
+func (this *ConsStatus) Deserialize(r io.Reader) error {
+	status, err := serialization.ReadUint8(r)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadUint8, deserialize status error: %v", err)
+	}
+	*this = ConsStatus(status)
+	return nil
+}
+
 type BlackListItem struct {
 	PeerPubkey string         //peerPubkey in black list
 	Address    common.Address //the owner of this peer
@@ -135,6 +153,8 @@ type PeerPoolItem struct {
 	Status     Status         //peer status
 	InitPos    uint64         //peer initPos
 	TotalPos   uint64         //total authorize pos this peer received
+	ConsStatus ConsStatus     //if in consensus group, if elect for consensus
+	Goverance  bool           //if elect for goverance
 }
 
 func (this *PeerPoolItem) Serialization(sink *common.ZeroCopySink) {
@@ -144,6 +164,8 @@ func (this *PeerPoolItem) Serialization(sink *common.ZeroCopySink) {
 	this.Status.Serialization(sink)
 	sink.WriteUint64(this.InitPos)
 	sink.WriteUint64(this.TotalPos)
+	sink.WriteUint64(uint64(this.ConsStatus))
+	sink.WriteBool(this.Goverance)
 }
 
 func (this *PeerPoolItem) Deserialization(source *common.ZeroCopySource) error {
@@ -173,12 +195,22 @@ func (this *PeerPoolItem) Deserialization(source *common.ZeroCopySource) error {
 	if err != nil {
 		return fmt.Errorf("serialization.ReadUint64, deserialize totalPos error: %v", err)
 	}
+	consStatus, err := utils.DecodeUint64(source)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadUint64, deserialize totalPos error: %v", err)
+	}
+	goverance, err := utils.DecodeBool(source)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadUint64, deserialize totalPos error: %v", err)
+	}
 	this.Index = index
 	this.PeerPubkey = peerPubkey
 	this.Address = *address
 	this.Status = *status
 	this.InitPos = initPos
 	this.TotalPos = totalPos
+	this.ConsStatus = ConsStatus(consStatus)
+	this.Goverance = goverance
 	return nil
 }
 
@@ -393,6 +425,7 @@ type CandidateSplitInfo struct {
 	PeerPubkey string
 	Address    common.Address
 	InitPos    uint64
+	Status     Status //peer status
 	Stake      uint64 //total stake, init pos + total pos
 	S          uint64 //fee split weight of this peer
 }
@@ -492,5 +525,45 @@ func (this *SplitFeeAddress) Deserialization(source *common.ZeroCopySource) erro
 	}
 	this.Address = *address
 	this.Amount = amount
+	return nil
+}
+
+type ConsGovView struct {
+	GovView          uint32
+	RunningStartView uint32 //start view of running period
+	ReelectStartView uint32 //start view of reelect period, can be moved up
+}
+
+func (this *ConsGovView) Serialize(w io.Writer) error {
+	if err := serialization.WriteUint32(w, this.GovView); err != nil {
+		return fmt.Errorf("serialization.WriteUint32, serialize view error: %v", err)
+	}
+	if err := serialization.WriteUint32(w, this.RunningStartView); err != nil {
+		return fmt.Errorf("serialization.WriteBool, serialize height error: %v", err)
+	}
+	if err := serialization.WriteUint32(w, this.ReelectStartView); err != nil {
+		return fmt.Errorf("serialization.WriteBool, serialize height error: %v", err)
+	}
+
+	return nil
+}
+
+func (this *ConsGovView) Deserialize(r io.Reader) error {
+	govView, err := serialization.ReadUint32(r)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadUint32, deserialize gov view error: %v", err)
+	}
+	runningStartView, err := serialization.ReadUint32(r)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadUint32, deserialize running view error: %v", err)
+	}
+	reelectStartView, err := serialization.ReadUint32(r)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadUint32, deserialize reelect view error: %v", err)
+	}
+
+	this.GovView = govView
+	this.RunningStartView = runningStartView
+	this.ReelectStartView = reelectStartView
 	return nil
 }

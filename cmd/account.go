@@ -23,11 +23,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/saveio/themis/crypto/keypair"
-	s "github.com/saveio/themis/crypto/signature"
 	"github.com/saveio/themis/cmd/common"
 	"github.com/saveio/themis/cmd/utils"
 	"github.com/saveio/themis/common/config"
+	"github.com/saveio/themis/crypto/keypair"
+	s "github.com/saveio/themis/crypto/signature"
 	"github.com/urfave/cli"
 )
 

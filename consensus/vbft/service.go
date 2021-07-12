@@ -26,8 +26,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/saveio/themis/crypto/keypair"
-	"github.com/saveio/themis/crypto/vrf"
 	"github.com/ontio/ontology-eventbus/actor"
 	"github.com/saveio/themis/account"
 	"github.com/saveio/themis/common"
@@ -38,6 +36,8 @@ import (
 	"github.com/saveio/themis/core/payload"
 	"github.com/saveio/themis/core/types"
 	"github.com/saveio/themis/core/utils"
+	"github.com/saveio/themis/crypto/keypair"
+	"github.com/saveio/themis/crypto/vrf"
 	"github.com/saveio/themis/events"
 	"github.com/saveio/themis/events/message"
 	p2pmsg "github.com/saveio/themis/p2pserver/message/types"
@@ -1199,6 +1199,35 @@ func (self *Server) processProposalMsg(msg *blockProposalMsg) {
 			}
 			self.processConsensusMsg(msg)
 		}()
+	} else if len(txs) == 2 && !self.nonSystxs(txs, msgBlkNum) {
+		go func() {
+			//Construct PoC tx and compare with proposed tx
+			pocTx, _, err := self.makePoCTx(true, msgBlkNum)
+			if err != nil {
+				log.Errorf("server %d verify PoC tx from %d failed, blk %d",
+					self.Index, msg.Block.getProposer(), msgBlkNum, err)
+				return
+			}
+
+			if pocTx == nil {
+				log.Errorf("server %d fail to generate PoC tx for blk %d",
+					self.Index, msgBlkNum)
+				return
+			}
+
+			invoke := txs[0].Payload.(*payload.InvokeCode)
+			invokeNew := pocTx.Payload.(*payload.InvokeCode)
+			if bytes.Compare(invoke.Code, invokeNew.Code) != 0 {
+				log.Debugf("receive PoC tx %v", invoke.Code)
+				log.Debugf("generated PoC tx %v", invokeNew.Code)
+
+				log.Errorf("server %d fail to generate same PoC from %d, blk %d",
+					self.Index, msg.Block.getProposer(), msgBlkNum)
+				return
+			}
+
+			self.processConsensusMsg(msg)
+		}()
 	} else {
 		// empty block, process directly
 		self.processConsensusMsg(msg)
@@ -1686,6 +1715,12 @@ func (self *Server) processTimerEvent(evt *TimerEvent) error {
 		if !isReady(self.getState()) {
 			return nil
 		}
+
+		//block has been sealed!
+		if ledger.DefLedger.GetCurrentBlockHeight() > evt.blockNum {
+			return nil
+		}
+
 		proposals := self.blockPool.getBlockProposals(evt.blockNum)
 		if len(proposals) == 0 {
 			// no proposal received, make proposal, start endorse timeout
@@ -2162,7 +2197,9 @@ func (self *Server) checkNeedUpdateChainConfig(blockNum uint32) bool {
 		return false
 	}
 	lastConfigBlkNum := prevBlk.getLastConfigBlockNum()
-	if (blockNum - lastConfigBlkNum) >= self.GetChainConfig().MaxBlockChangeView {
+	// if (blockNum - lastConfigBlkNum) >= self.GetChainConfig().MaxBlockChangeView {
+	if (blockNum - lastConfigBlkNum) >= gover.NUM_BLOCK_PER_VIEW {
+		log.Debugf("checkNeedUpdateChainConfig blockNum:%d, lastConfigBlkNum:%d", blockNum, lastConfigBlkNum)
 		return true
 	}
 	return false
@@ -2202,6 +2239,27 @@ func (self *Server) nonSystxs(sysTxs []*types.Transaction, blkNum uint32) bool {
 			return false
 		}
 	}
+
+	if self.checkNeedUpdateChainConfig(blkNum) && len(sysTxs) == 2 {
+		log.Debugf("nonSystxs blocknum:%d, num of sysTxs:%d", blkNum, len(sysTxs))
+
+		invoke := sysTxs[0].Payload.(*payload.InvokeCode)
+		if prefix := len(invoke.Code) - len(ninit.SETTLE_VIEW_BYTES); prefix > 0 {
+			if bytes.Compare(invoke.Code[prefix:], ninit.SETTLE_VIEW_BYTES) != 0 {
+				return true
+			}
+		}
+
+		invoke = sysTxs[1].Payload.(*payload.InvokeCode)
+		if invoke == nil {
+			log.Errorf("nonSystxs invoke is nil,blocknum:%d", blkNum)
+			return true
+		}
+		if bytes.Compare(invoke.Code, ninit.COMMIT_DPOS_BYTES) == 0 {
+			return false
+		}
+	}
+
 	return true
 }
 
@@ -2218,7 +2276,12 @@ func (self *Server) makeProposal(blkNum uint32, forEmpty bool) error {
 	//check need upate chainconfig
 	var cfg *vconfig.ChainConfig
 	if self.checkNeedUpdateChainConfig(blkNum) || self.checkUpdateChainConfig(blkNum) {
-		chainconfig, err := getChainConfig(self.blockPool.getExecWriteSet(blkNum-1), blkNum)
+		pocTx, param, err := self.makePoCTx(false, 0)
+		if err != nil {
+			log.Infof("makeBlock build PoC settle tx error:%s", err)
+		}
+
+		chainconfig, err := getChainConfig(self.blockPool.getExecWriteSet(blkNum-1), blkNum, param)
 		if err != nil {
 			return fmt.Errorf("getChainConfig failed:%s", err)
 		}
@@ -2233,6 +2296,10 @@ func (self *Server) makeProposal(blkNum uint32, forEmpty bool) error {
 		}
 		forEmpty = true
 		cfg = chainconfig
+
+		if pocTx != nil {
+			sysTxs = append([]*types.Transaction{pocTx}, sysTxs...)
+		}
 	}
 	if self.nonConsensusNode() {
 		return fmt.Errorf("%d quit consensus node", self.Index)
@@ -2532,4 +2599,42 @@ func (self *Server) restartSyncing() {
 		Type:     ForceCheckSync,
 		blockNum: self.GetCommittedBlockNo(),
 	}
+}
+
+func (self *Server) makePoCTx(check bool, h uint32) (*types.Transaction, *gover.SubmitNonceParam, error) {
+	var param *gover.SubmitNonceParam
+
+	height := ledger.DefLedger.GetCurrentBlockHeight()
+
+	height += 1
+	if check {
+		height = h
+	}
+	log.Debugf("makePoCTx height:%d, NUM_BLOCK_PER_VIEW:%d", height, gover.NUM_BLOCK_PER_VIEW)
+
+	if height%gover.NUM_BLOCK_PER_VIEW != 0 {
+		return nil, nil, nil
+	}
+
+	view := height / gover.NUM_BLOCK_PER_VIEW
+	log.Debugf("makePoCTx try get PoC ext param for view:%d", view)
+
+	param = self.poolActor.GetPoCParam(view)
+	if param == nil {
+		log.Debugf("makePoCTx use dummy param for view:%d", view)
+		param = &gover.SubmitNonceParam{View: view}
+	}
+
+	log.Debugf("winner %v, base58 %s", param, param.Address.ToBase58())
+
+	codes, _ := utils.BuildNativeInvokeCode(nutils.GovernanceContractAddress, 0, gover.SETTLE_VIEW, []interface{}{param})
+	mutable := utils.NewInvokeTransaction(codes)
+	mutable.GasLimit = math.MaxUint64
+
+	tx, err := mutable.IntoImmutable()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return tx, param, nil
 }

@@ -374,7 +374,7 @@ func createLog(logLevel int, a ...interface{}) *Logger {
 	}
 	fileAndStdoutWrite := io.MultiWriter(writers...)
 
-	logger := New(fileAndStdoutWrite, "", log.LUTC|log.Ldate|log.Lmicroseconds, logLevel, logFile)
+	logger := New(fileAndStdoutWrite, "", log.Ldate|log.Lmicroseconds, logLevel, logFile)
 
 	return logger
 }

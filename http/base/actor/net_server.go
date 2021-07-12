@@ -19,6 +19,7 @@
 package actor
 
 import (
+	"github.com/ontio/ontology-eventbus/actor"
 	"github.com/saveio/themis/p2pserver/common"
 	p2p "github.com/saveio/themis/p2pserver/net/protocol"
 )
@@ -27,6 +28,12 @@ var netServer p2p.P2P
 
 func SetNetServer(p2p p2p.P2P) {
 	netServer = p2p
+}
+
+var netServerPid *actor.PID
+
+func SetNetServerPID(actr *actor.PID) {
+	netServerPid = actr
 }
 
 //GetConnectionCnt from netSever actor

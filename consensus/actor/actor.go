@@ -25,6 +25,10 @@ import (
 	"github.com/ontio/ontology-eventbus/actor"
 	"github.com/saveio/themis/core/types"
 	ontErrors "github.com/saveio/themis/errors"
+
+	// netActor "github.com/saveio/themis/network/actor/server"
+	// ptypes "github.com/saveio/themis/network/component/wire/old/types"
+	gov "github.com/saveio/themis/smartcontract/service/native/governance"
 	txpool "github.com/saveio/themis/txnpool/common"
 )
 
@@ -60,4 +64,44 @@ func (self *TxPoolActor) VerifyBlock(txs []*types.Transaction, height uint32) er
 	}
 
 	return nil
+}
+func (self *TxPoolActor) GetPoCParam(view uint32) *gov.SubmitNonceParam {
+	poolmsg := &txpool.GetPoCReq{View: view}
+	future := self.Pool.RequestFuture(poolmsg, time.Second*10)
+	entry, err := future.Result()
+	if err != nil {
+		return nil
+	}
+
+	param := entry.(*txpool.GetPoCRsp).Param
+	return param
+}
+
+type P2PActor struct {
+	P2P *actor.PID
+}
+
+func (self *P2PActor) Broadcast(msg interface{}) {
+	self.P2P.Tell(msg)
+}
+
+// TODO:FIXME
+// func (self *P2PActor) Transmit(target string, msg ptypes.Message) {
+// 	self.P2P.Tell(&netActor.TransmitConsensusMsgReq{
+// 		Target: target,
+// 		Msg:    msg,
+// 	})
+// }
+
+type LedgerActor struct {
+	Ledger *actor.PID
+}
+
+type PoCPoolActor struct {
+	Pool *actor.PID
+}
+
+func (self *PoCPoolActor) PushPoCParam(param *gov.SubmitNonceParam) {
+	pocReq := &txpool.PoCReq{param, txpool.PoCSender}
+	self.Pool.Tell(pocReq)
 }

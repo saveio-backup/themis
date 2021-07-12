@@ -129,7 +129,14 @@ var AppHelpFlagGroups = []flagGroup{
 		Name: "CONSENSUS",
 		Flags: []cli.Flag{
 			utils.EnableConsensusFlag,
+			utils.EnablePoCMiningFlag,
 			utils.MaxTxInBlockFlag,
+		},
+	},
+	{
+		Name: "POC",
+		Flags: []cli.Flag{
+			utils.PlotDirFlag,
 		},
 	},
 	{
@@ -153,6 +160,9 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.MaxConnInBoundFlag,
 			utils.MaxConnOutBoundFlag,
 			utils.MaxConnInBoundForSingleIPFlag,
+			utils.EnableProxyFlag,
+			utils.ProxyServerListFlag,
+			utils.ProxyServerIdListFlag,
 		},
 	},
 	{
@@ -231,8 +241,6 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.TransactionPayerFlag,
 			utils.PrepareExecTransactionFlag,
 			utils.TransferFromAmountFlag,
-			utils.WithdrawONGReceiveAccountFlag,
-			utils.WithdrawONGAmountFlag,
 		},
 	},
 	{

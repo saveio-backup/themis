@@ -37,6 +37,7 @@ func SetThemisConfig(ctx *cli.Context) (*config.ThemisConfig, error) {
 	}
 	setCommonConfig(ctx, cfg.Common)
 	setConsensusConfig(ctx, cfg.Consensus)
+	setPoCMiningConfig(ctx, cfg.PoC)
 	setP2PNodeConfig(ctx, cfg.P2PNode)
 	setRpcConfig(ctx, cfg.Rpc)
 	setRestfulConfig(ctx, cfg.Restful)
@@ -142,7 +143,12 @@ func setCommonConfig(ctx *cli.Context, cfg *config.CommonConfig) {
 
 func setConsensusConfig(ctx *cli.Context, cfg *config.ConsensusConfig) {
 	cfg.EnableConsensus = ctx.Bool(utils.GetFlagName(utils.EnableConsensusFlag))
+	cfg.EnablePoCMining = ctx.Bool(utils.GetFlagName(utils.EnablePoCMiningFlag))
 	cfg.MaxTxInBlock = ctx.Uint(utils.GetFlagName(utils.MaxTxInBlockFlag))
+}
+
+func setPoCMiningConfig(ctx *cli.Context, cfg *config.PoCMiningConfig) {
+	cfg.PlotDir = ctx.String(utils.GetFlagName(utils.PlotDirFlag))
 }
 
 func setP2PNodeConfig(ctx *cli.Context, cfg *config.P2PNodeConfig) {
@@ -176,6 +182,10 @@ func setP2PNodeConfig(ctx *cli.Context, cfg *config.P2PNodeConfig) {
 		}
 	}
 
+	cfg.NumPeer = ctx.Uint(utils.GetFlagName(utils.NumPeersFlag))
+	cfg.EnableProxy = ctx.Bool(utils.GetFlagName(utils.EnableProxyFlag))
+	cfg.ProxyServerList = ctx.String(utils.GetFlagName(utils.ProxyServerListFlag))
+	cfg.ProxyServerIdList = ctx.String(utils.GetFlagName(utils.ProxyServerIdListFlag))
 }
 
 func setRpcConfig(ctx *cli.Context, cfg *config.RpcConfig) {

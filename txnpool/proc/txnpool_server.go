@@ -27,11 +27,13 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/ontio/ontology-eventbus/actor"
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/config"
 	"github.com/saveio/themis/common/log"
+	consutils "github.com/saveio/themis/consensus/utils"
 	"github.com/saveio/themis/core/ledger"
 	tx "github.com/saveio/themis/core/types"
 	"github.com/saveio/themis/errors"
@@ -39,6 +41,7 @@ import (
 	msgpack "github.com/saveio/themis/p2pserver/message/msg_pack"
 	p2p "github.com/saveio/themis/p2pserver/net/protocol"
 	params "github.com/saveio/themis/smartcontract/service/native/global_params"
+	gov "github.com/saveio/themis/smartcontract/service/native/governance"
 	nutils "github.com/saveio/themis/smartcontract/service/native/utils"
 	tc "github.com/saveio/themis/txnpool/common"
 	"github.com/saveio/themis/validator/types"
@@ -73,6 +76,16 @@ type registerValidators struct {
 	state   roundRobinState                                 // For loadbance
 }
 
+type serverPendingParam struct {
+	param  *gov.SubmitNonceParam // Pending poc puzzle
+	sender tc.SenderType         // Indicate which sender poc param is from
+}
+
+type CheckPoCReq struct {
+	param *gov.SubmitNonceParam // Pending poc puzzle
+	info  *gov.MiningInfo       // mining info
+}
+
 // TXPoolServer contains all api to external modules
 type TXPoolServer struct {
 	mu                    sync.RWMutex                        // Sync mutex
@@ -90,6 +103,12 @@ type TXPoolServer struct {
 	gasPrice              uint64              // Gas price to enforce for acceptance into the pool
 	disablePreExec        bool                // Disbale PreExecute a transaction
 	disableBroadcastNetTx bool                // Disable broadcast tx from network
+	pocWg                 sync.WaitGroup      // poc Worker sync
+	pocWorkers            []pocPoolWorker     // poc Worker pool
+	pocPool               *tc.PoCPool
+	allPendingParam       map[common.Uint256]*serverPendingParam // The poc that server is processing
+	pocSlots              chan struct{}
+	miningInfo            *gov.MiningInfo
 }
 
 // NewTxPoolServer creates a new tx pool server to schedule workers to
@@ -192,6 +211,71 @@ func (s *TXPoolServer) init(num uint8, disablePreExec, disableBroadcastNetTx boo
 		s.wg.Add(1)
 		s.workers[i].init(i, s)
 		go s.workers[i].start()
+	}
+
+	// init poc stuff
+	miningInfo, err := consutils.GetMiningInfo()
+	if err != nil {
+		log.Infof("tx pool: fail to get mining info: %s", err)
+	}
+	s.miningInfo = miningInfo
+
+	// Initial PoCPool
+	s.pocPool = &tc.PoCPool{}
+	s.pocPool.Init(miningInfo.View)
+	s.allPendingParam = make(map[common.Uint256]*serverPendingParam)
+
+	s.pocSlots = make(chan struct{}, num)
+	for i = 0; i < num; i++ {
+		s.pocSlots <- struct{}{}
+	}
+
+	// Create the given concurrent workers for PoC
+	s.pocWorkers = make([]pocPoolWorker, num)
+	// Initial and start the poc workers
+	for i = 0; i < num; i++ {
+		s.pocWg.Add(1)
+		s.pocWorkers[i].init(i, s)
+		go s.pocWorkers[i].start()
+	}
+
+	// update miningInfo and notify PoCPool
+	go s.monitor()
+}
+
+func (s *TXPoolServer) monitor() {
+	interval := config.DefConfig.PoC.QueryMiningInfoInterval
+	timer := time.NewTimer(time.Second * time.Duration(interval))
+
+	log.Infof("TXPoolServer monitor start with interval:%d", interval)
+
+	for {
+		select {
+		case <-timer.C:
+			timer.Reset(time.Second * time.Duration(interval))
+			log.Infof("TXPoolServer monitor get mining info")
+
+			miningInfo, err := consutils.GetMiningInfo()
+			if err != nil {
+				log.Infof("TXPoolServer monitor: fail to get mining info: %s", err)
+			}
+
+			if miningInfo.View > s.miningInfo.View {
+				s.mu.Lock()
+				s.miningInfo = miningInfo
+				s.mu.Unlock()
+
+				list := s.pocPool.RemoveFuturePoC(miningInfo.View)
+				go func(pocList []*tc.PoCEntry) {
+					for _, param := range pocList {
+						s.assignParamToWorker(param.Param, tc.PoCSender)
+					}
+				}(list)
+
+				go s.pocPool.UpdateParam(miningInfo.View)
+			}
+
+		}
 	}
 }
 
@@ -490,6 +574,10 @@ func (s *TXPoolServer) Stop() {
 	if s.slots != nil {
 		close(s.slots)
 	}
+
+	if s.pocSlots != nil {
+		close(s.pocSlots)
+	}
 }
 
 // getTransaction returns a transaction with the transaction hash.
@@ -765,4 +853,110 @@ func (s *TXPoolServer) verifyBlock(req *tc.VerifyBlockReq, sender *actor.PID) {
 	if len(s.pendingBlock.unProcessedTxs) == 0 {
 		s.sendBlkResult2Consensus()
 	}
+}
+
+// setPendingTx adds a transaction to the pending list, if the
+// transaction is already in the pending list, just return false.
+func (s *TXPoolServer) setPendingParam(param *gov.SubmitNonceParam,
+	sender tc.SenderType) bool {
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if ok := s.allPendingParam[param.Hash()]; ok != nil {
+		log.Debugf("setPendingParam: transaction %x already in the verifying process",
+			param.Hash())
+		return false
+	}
+
+	pt := &serverPendingParam{
+		param:  param,
+		sender: sender,
+	}
+
+	s.allPendingParam[param.Hash()] = pt
+	return true
+}
+
+// getTransaction returns a poc param with the hash.
+func (s *TXPoolServer) getParam(hash common.Uint256) *gov.SubmitNonceParam {
+	return s.pocPool.GetParam(hash)
+}
+
+// getPoC returns winner PoC param  for consensus.
+func (s *TXPoolServer) getPoCParam(view uint32) *gov.SubmitNonceParam {
+	param := s.pocPool.GetPoCParam(view)
+	return param
+}
+
+func (s *TXPoolServer) removePendingParam(hash common.Uint256, err errors.ErrCode) {
+
+	s.mu.Lock()
+
+	_, ok := s.allPendingParam[hash]
+	if !ok {
+		s.mu.Unlock()
+		return
+	}
+
+	delete(s.allPendingParam, hash)
+	s.mu.Unlock()
+
+}
+
+// assignTxToWorker assigns a new transaction to a worker by LB
+func (s *TXPoolServer) assignParamToWorker(param *gov.SubmitNonceParam,
+	sender tc.SenderType) bool {
+
+	if param == nil {
+		return false
+	}
+
+	s.mu.Lock()
+	miningInfo := s.miningInfo
+	s.mu.Unlock()
+
+	if param.View < miningInfo.View {
+		log.Debugf("assignParamToWorker: submitted view %d less than %d",
+			param.View, miningInfo.View)
+		return false
+	} else if param.View > miningInfo.View {
+		if config.DefConfig.Consensus.EnableConsensus {
+			//Put future poc in furture list of pocPool!
+			pocEntry := &tc.PoCEntry{
+				Param: param,
+			}
+			ok := s.pocPool.AddFuturePoC(pocEntry)
+
+			if ok {
+				log.Debugf("assignParamToWorker: add param %v for view %d to future list", param, param.View)
+			}
+			return ok
+		}
+	}
+
+	if ok := s.setPendingParam(param, sender); !ok {
+		return false
+	}
+
+	// Assign the poc param to the worker
+	lb := make(tc.LBSlice, len(s.pocWorkers))
+	for i := 0; i < len(s.pocWorkers); i++ {
+		entry := tc.LB{Size: len(s.pocWorkers[i].rcvTXCh) +
+			len(s.pocWorkers[i].pendingParamList),
+			WorkerID: uint8(i),
+		}
+		lb[i] = entry
+	}
+	sort.Sort(lb)
+
+	s.pocWorkers[lb[0].WorkerID].rcvTXCh <- &CheckPoCReq{param: param, info: miningInfo}
+	return true
+}
+
+// addPoCList adds a valid poc puzzle result to the poc pool.
+func (s *TXPoolServer) addPoCList(entry *tc.PoCEntry) bool {
+	ret := s.pocPool.AddPoC(entry)
+
+	return ret
 }

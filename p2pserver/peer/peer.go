@@ -19,6 +19,7 @@
 package peer
 
 import (
+	"container/list"
 	"errors"
 	"fmt"
 	"net"
@@ -34,6 +35,72 @@ import (
 	conn "github.com/saveio/themis/p2pserver/link"
 	"github.com/saveio/themis/p2pserver/message/types"
 )
+
+const (
+	TX_HASH = iota
+	POC_HASH
+)
+
+const (
+	MAX_KNOWN_TX  = 1000
+	MAX_KNOWN_POC = 1000
+)
+
+type knownInfo struct {
+	*sync.RWMutex
+	queue *list.List
+	index map[interface{}]struct{}
+}
+
+func newknownInfo() *knownInfo {
+	return &knownInfo{
+		RWMutex: &sync.RWMutex{},
+		queue:   list.New(),
+		index:   make(map[interface{}]struct{}),
+	}
+}
+
+func (info *knownInfo) Len() int {
+	info.RLock()
+	defer info.RUnlock()
+
+	return info.queue.Len()
+}
+
+func (info *knownInfo) Push(hash interface{}) {
+	info.Lock()
+	defer info.Unlock()
+
+	if _, ok := info.index[hash]; ok {
+		return
+	}
+	info.queue.PushBack(hash)
+	info.index[hash] = struct{}{}
+}
+
+func (info *knownInfo) Pop() {
+	info.Lock()
+	defer info.Unlock()
+
+	if info.queue.Len() == 0 {
+		return
+	}
+
+	e := info.queue.Front()
+	info.queue.Remove(e)
+
+	delete(info.index, e.Value)
+}
+
+func (info *knownInfo) Has(hash interface{}) bool {
+	info.RLock()
+	defer info.RUnlock()
+
+	if _, ok := info.index[hash]; ok {
+		return true
+	}
+	return false
+}
 
 // PeerInfo provides the basic information of a peer
 type PeerInfo struct {
@@ -92,6 +159,8 @@ type Peer struct {
 	Info     *PeerInfo
 	Link     *conn.Link
 	connLock sync.RWMutex
+	knownTx  *knownInfo
+	knownPoC *knownInfo
 }
 
 //NewPeer return new peer without publickey initial
@@ -99,6 +168,9 @@ func NewPeer(info *PeerInfo, c net.Conn, msgChan chan *types.MsgPayload) *Peer {
 	return &Peer{
 		Info: info,
 		Link: conn.NewLink(info.Id, c, msgChan),
+
+		knownTx:  newknownInfo(),
+		knownPoC: newknownInfo(),
 	}
 }
 
@@ -214,4 +286,26 @@ func (this *Peer) Send(msg types.Message) error {
 //GetHttpInfoPort return peer`s httpinfo port
 func (this *Peer) GetHttpInfoPort() uint16 {
 	return this.Info.HttpInfoPort
+}
+
+func (this *Peer) MarkTx(hash comm.Uint256) {
+	this.knownTx.Push(hash)
+	if this.knownTx.Len() > MAX_KNOWN_TX {
+		this.knownTx.Pop()
+	}
+}
+
+func (this *Peer) KnowTx(hash comm.Uint256) bool {
+	return this.knownTx.Has(hash)
+}
+
+func (this *Peer) MarkPoC(hash comm.Uint256) {
+	this.knownPoC.Push(hash)
+	if this.knownPoC.Len() > MAX_KNOWN_POC {
+		this.knownPoC.Pop()
+	}
+}
+
+func (this *Peer) KnowPoC(hash comm.Uint256) bool {
+	return this.knownPoC.Has(hash)
 }

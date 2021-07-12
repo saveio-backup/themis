@@ -36,6 +36,7 @@ import (
 	bactor "github.com/saveio/themis/http/base/actor"
 	common2 "github.com/saveio/themis/p2pserver/common"
 	"github.com/saveio/themis/smartcontract/event"
+	gov "github.com/saveio/themis/smartcontract/service/native/governance"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 	cstate "github.com/saveio/themis/smartcontract/states"
 	"github.com/saveio/themis/vm/neovm"
@@ -404,6 +405,34 @@ func GetContractAllowance(cVersion byte, contractAddr, fromAddr, toAddr common.A
 	return allowance.Uint64(), nil
 }
 
+func GetSipInfo(Index uint32) (*gov.SIP, error) {
+	param := gov.QuerySipParam{Index: Index}
+	mutable, err := NewNativeInvokeTransaction(0, 0, utils.GovernanceContractAddress, 0, gov.QUERY_SIP, []interface{}{param})
+	if err != nil {
+		return nil, fmt.Errorf("NewNativeInvokeTransaction error:%s", err)
+	}
+	tx, err := mutable.IntoImmutable()
+	if err != nil {
+		return nil, err
+	}
+	result, err := bactor.PreExecuteContract(tx)
+	if err != nil {
+		return nil, fmt.Errorf("PreExecuteContract failed %v", err)
+	}
+
+	sip := new(gov.SIP)
+	data, err := hex.DecodeString(result.Result.(string))
+	if err != nil {
+		return nil, fmt.Errorf("decode result error %v", err)
+	}
+
+	err = sip.Deserialize(bytes.NewBuffer([]byte(data)))
+	if err != nil {
+		return nil, fmt.Errorf("deserialize result error %v", err)
+	}
+
+	return sip, nil
+}
 func GetGasPrice() (map[string]interface{}, error) {
 	start := bactor.GetCurrentBlockHeight()
 	var gasPrice uint64 = 0

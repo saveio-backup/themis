@@ -317,6 +317,28 @@ func ApproveCandidateTx(gasPrice, gasLimit uint64, reject bool, peerPubkey strin
 	return mutableTx, nil
 }
 
+func RegisterSipTx(gasPrice, gasLimit uint64, height uint32, detail string, minVotes uint32, bonus uint64) (*types.MutableTransaction, error) {
+
+	var contractAddr common.Address
+	var method string
+	var param interface{}
+
+	param = &governance.RegisterSipParam{
+		Height:   height,
+		Detail:   []byte(detail),
+		MinVotes: minVotes,
+		Bonus:    bonus,
+	}
+	contractAddr = utils.GovernanceContractAddress
+	method = governance.REGISTER_SIP
+	invokeCode, err := cutils.BuildNativeInvokeCode(contractAddr, 0, method, []interface{}{param})
+	if err != nil {
+		return nil, fmt.Errorf("build invoke code error:%s", err)
+	}
+	mutableTx := NewInvokeTransaction(gasPrice, gasLimit, invokeCode)
+	return mutableTx, nil
+}
+
 //NewInvokeTransaction return smart contract invoke transaction
 func NewInvokeTransaction(gasPrice, gasLimit uint64, invokeCode []byte) *types.MutableTransaction {
 	invokePayload := &payload.InvokeCode{

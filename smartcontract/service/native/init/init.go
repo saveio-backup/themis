@@ -39,6 +39,7 @@ import (
 
 var (
 	COMMIT_DPOS_BYTES = InitBytes(utils.GovernanceContractAddress, governance.COMMIT_DPOS)
+	SETTLE_VIEW_BYTES = InitBytesWithoutArg(utils.GovernanceContractAddress, governance.SETTLE_VIEW)
 )
 
 func init() {
@@ -57,6 +58,18 @@ func InitBytes(addr common.Address, method string) []byte {
 	bf := new(bytes.Buffer)
 	builder := vm.NewParamsBuilder(bf)
 	builder.EmitPushByteArray([]byte{})
+	builder.EmitPushByteArray([]byte(method))
+	builder.EmitPushByteArray(addr[:])
+	builder.EmitPushInteger(big.NewInt(0))
+	builder.Emit(vm.SYSCALL)
+	builder.EmitPushByteArray([]byte(neovm.NATIVE_INVOKE_NAME))
+
+	return builder.ToArray()
+}
+func InitBytesWithoutArg(addr common.Address, method string) []byte {
+	bf := new(bytes.Buffer)
+	builder := vm.NewParamsBuilder(bf)
+
 	builder.EmitPushByteArray([]byte(method))
 	builder.EmitPushByteArray(addr[:])
 	builder.EmitPushInteger(big.NewInt(0))

@@ -23,6 +23,7 @@ import (
 	"github.com/saveio/themis/account"
 	"github.com/saveio/themis/common/log"
 	"github.com/saveio/themis/consensus/dbft"
+	"github.com/saveio/themis/consensus/poc"
 	"github.com/saveio/themis/consensus/solo"
 	"github.com/saveio/themis/consensus/vbft"
 	p2p "github.com/saveio/themis/p2pserver/net/protocol"
@@ -55,5 +56,13 @@ func NewConsensusService(consensusType string, account *account.Account, txpool 
 		consensus, err = vbft.NewVbftServer(account, txpool, p2p)
 	}
 	log.Infof("ConsensusType:%s", consensusType)
+	return consensus, err
+}
+func NewPoCService(account *account.Account, pocPool *actor.PID, txpool *actor.PID) (ConsensusService, error) {
+	var consensus ConsensusService
+	var err error
+
+	consensus, err = poc.NewMiner(account, pocPool, txpool)
+	log.Infof("ConsensusType: PoC")
 	return consensus, err
 }

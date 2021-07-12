@@ -158,6 +158,16 @@ func GetView(native *native.NativeService, contract common.Address) (uint32, err
 	return governanceView.View, nil
 }
 
+func increaseGasRevenue(native *native.NativeService, contract common.Address, amount uint64) error {
+	gasRevenue, err := getGasRevenue(native, contract)
+	if err != nil {
+		return fmt.Errorf("increaseGasRevenue, get gas revenue error: %v", err)
+	}
+	gasRevenue.Total += amount
+	putGasRevenue(native, contract, gasRevenue)
+	return nil
+}
+
 func appCallTransferRevenue(native *native.NativeService, from common.Address, to common.Address, amount uint64) error {
 	err := appCallTransfer(native, utils.UsdtContractAddress, from, to, amount)
 	if err != nil {
@@ -800,4 +810,41 @@ func getUsdtBalance(native *native.NativeService, address common.Address) (uint6
 	}
 	balance := common.BigIntFromNeoBytes(value).Uint64()
 	return balance, nil
+}
+
+func GetConsGovView(native *native.NativeService, contract common.Address) (*ConsGovView, error) {
+	consgovViewBytes, err := native.CacheDB.Get(utils.ConcatKey(contract, []byte(CONS_GOV_VIEW)))
+	if err != nil {
+		return nil, fmt.Errorf("getConsGovView, get consgovViewBytes error: %v", err)
+	}
+	consgovView := new(ConsGovView)
+	if consgovViewBytes == nil {
+		return nil, fmt.Errorf("getConsGovView, get nil consgovViewBytes")
+	} else {
+		value, err := cstates.GetValueFromRawStorageItem(consgovViewBytes)
+		if err != nil {
+			return nil, fmt.Errorf("getGovernanceView, deserialize from raw storage item err:%v", err)
+		}
+		if err := consgovView.Deserialize(bytes.NewBuffer(value)); err != nil {
+			return nil, fmt.Errorf("deserialize, deserialize ConsGovView error: %v", err)
+		}
+	}
+	return consgovView, nil
+}
+
+func putConsGovView(native *native.NativeService, contract common.Address, consGovView *ConsGovView) error {
+	bf := new(bytes.Buffer)
+	if err := consGovView.Serialize(bf); err != nil {
+		return fmt.Errorf("serialize, serialize consGovView error: %v", err)
+	}
+	native.CacheDB.Put(utils.ConcatKey(contract, []byte(CONS_GOV_VIEW)), cstates.GenRawStorageItem(bf.Bytes()))
+	return nil
+}
+
+func GetGovView(native *native.NativeService, contract common.Address) (uint32, error) {
+	consGovView, err := GetConsGovView(native, contract)
+	if err != nil {
+		return 0, fmt.Errorf("getView, getGovernanceView error: %v", err)
+	}
+	return consGovView.GovView, nil
 }

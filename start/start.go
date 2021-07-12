@@ -72,14 +72,21 @@ func StartThemis(ctx *cli.Context) {
 	}
 	p2pSvr, p2p, err := InitP2PNode(ctx, txpool, acc)
 	if err != nil {
-		log.Errorf("initP2PNode error: %s", err)
+		log.Errorf("initP2PNode error:%s", err)
 		return
 	}
+
 	_, err = InitConsensus(ctx, p2p, txpool, acc)
 	if err != nil {
 		log.Errorf("initConsensus error: %s", err)
 		return
 	}
+	_, err = InitPoCMining(ctx, txpool, acc)
+	if err != nil {
+		log.Errorf("initPoCMining error:%s", err)
+		return
+	}
+
 	err = InitRpc(ctx)
 	if err != nil {
 		log.Errorf("initRpc error: %s", err)
@@ -90,7 +97,7 @@ func StartThemis(ctx *cli.Context) {
 		log.Errorf("initLocalRpc error: %s", err)
 		return
 	}
-	initGraphQL(ctx)
+	// initGraphQL(ctx)
 	InitRestful(ctx)
 	InitWs(ctx)
 	InitNodeInfo(ctx, p2pSvr)
@@ -221,14 +228,14 @@ func InitP2PNode(ctx *cli.Context, txpoolSvr *proc.TXPoolServer, acct *account.A
 	return p2p, p2p.GetNetwork(), nil
 }
 
-func InitConsensus(ctx *cli.Context, net p2p.P2P, txpoolSvr *proc.TXPoolServer, acc *account.Account) (consensus.ConsensusService, error) {
+func InitConsensus(ctx *cli.Context, p2p p2p.P2P, txpoolSvr *proc.TXPoolServer, acc *account.Account) (consensus.ConsensusService, error) {
 	if !config.DefConfig.Consensus.EnableConsensus {
 		return nil, nil
 	}
 	pool := txpoolSvr.GetPID(tc.TxPoolActor)
 
 	consensusType := strings.ToLower(config.DefConfig.Genesis.ConsensusType)
-	consensusService, err := consensus.NewConsensusService(consensusType, acc, pool, nil, net)
+	consensusService, err := consensus.NewConsensusService(consensusType, acc, pool, nil, p2p)
 	if err != nil {
 		return nil, fmt.Errorf("NewConsensusService %s error: %s", consensusType, err)
 	}
@@ -239,6 +246,24 @@ func InitConsensus(ctx *cli.Context, net p2p.P2P, txpoolSvr *proc.TXPoolServer, 
 
 	log.Infof("Consensus init success")
 	return consensusService, nil
+}
+
+func InitPoCMining(ctx *cli.Context, txpoolSvr *proc.TXPoolServer, acc *account.Account) (consensus.ConsensusService, error) {
+	if !config.DefConfig.Consensus.EnablePoCMining {
+		return nil, nil
+	}
+	pool := txpoolSvr.GetPID(tc.TxPoolActor)
+
+	pocPool := txpoolSvr.GetPID(tc.TxActor)
+	pocService, err := consensus.NewPoCService(acc, pocPool, pool)
+	if err != nil {
+		return nil, fmt.Errorf("NewConsensusService: PoC error:%s", err)
+	}
+	pocService.Start()
+	bactor.SetPoCConsensusPid(pocService.GetPID())
+	log.Infof("PoC Mining init success")
+
+	return pocService, nil
 }
 
 func InitRpc(ctx *cli.Context) error {

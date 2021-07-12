@@ -28,3 +28,17 @@ type TimeOut struct{}
 type BlockCompleted struct {
 	Block *types.Block
 }
+type PlotFileAction struct {
+	PlotFile string
+}
+
+type ConsVoteDecision struct {
+	NodesPubkey []string
+}
+
+type SipVoteDecision struct {
+	SipIndex uint32
+	Agree    byte
+}
+
+type TriggerConsElect struct{}

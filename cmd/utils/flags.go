@@ -87,6 +87,10 @@ var (
 		Name:  "enable-consensus",
 		Usage: "Start consensus module",
 	}
+	EnablePoCMiningFlag = cli.BoolFlag{
+		Name:  "enable-poc-mining",
+		Usage: "Start poc mining module",
+	}
 	MaxTxInBlockFlag = cli.IntFlag{
 		Name:  "max-tx-in-block",
 		Usage: "Max transaction `<number>` in block",
@@ -102,6 +106,13 @@ var (
 		Usage: "Min gas price `<value>` of transaction to be accepted by tx pool.",
 		Value: config.DEFAULT_GAS_PRICE,
 	}
+
+	// PoC setting
+	PlotDirFlag = cli.StringFlag{
+		Name:  "plot-dir",
+		Usage: "Plots file dir `<path>`",
+	}
+
 	//Test Mode setting
 	EnableTestModeFlag = cli.BoolFlag{
 		Name:  "testmode",
@@ -162,6 +173,24 @@ var (
 		Usage: "Max connection `<number>` in bound for single ip",
 		Value: config.DEFAULT_MAX_CONN_IN_BOUND_FOR_SINGLE_IP,
 	}
+	NumPeersFlag = cli.UintFlag{
+		Name:  "num-peers",
+		Usage: "Expect number of connection to peers",
+		Value: config.DEFAULT_NUM_PEERS,
+	}
+	EnableProxyFlag = cli.BoolFlag{
+		Name:  "enable-proxy",
+		Usage: "Connect to proxy server to get public network address",
+	}
+	ProxyServerListFlag = cli.StringFlag{
+		Name:  "proxy-server-list",
+		Usage: "Address list of proxy servers",
+	}
+	ProxyServerIdListFlag = cli.StringFlag{
+		Name:  "proxy-server-id-list",
+		Usage: "Id list of proxy servers",
+	}
+
 	// RPC settings
 	RPCDisabledFlag = cli.BoolFlag{
 		Name:  "disable-rpc",
@@ -449,14 +478,6 @@ var (
 		Name:  "prepare,p",
 		Usage: "Prepare execute transaction, without commit to ledger",
 	}
-	WithdrawONGReceiveAccountFlag = cli.StringFlag{
-		Name:  "receive",
-		Usage: "ONG receive `<address>`，Default the same with owner account",
-	}
-	WithdrawONGAmountFlag = cli.StringFlag{
-		Name:  "amount",
-		Usage: "Withdraw amount `<number>`, Float number. Default withdraw all",
-	}
 	ForceTxFlag = cli.BoolFlag{
 		Name:  "force,f",
 		Usage: "Force to send transaction",
@@ -583,6 +604,34 @@ var (
 		Name:  "blockchange",
 		Usage: "Number of block to change view",
 		Value: 12000,
+	}
+
+	//height sip become effective
+	SipHeightFlag = cli.Uint64Flag{
+		Name:  "height",
+		Usage: "Height the sip become effective",
+	}
+	SipDetailFlag = cli.StringFlag{
+		Name:  "detail",
+		Usage: "Detail of the sip, description of proposal. Such as MinInitStake=1000 or ConsBonusSplitRate=50/50",
+	}
+	SipMinVotesFlag = cli.Uint64Flag{
+		Name:  "minvotes",
+		Usage: "Minimum votes for the sip become effective",
+	}
+	SipBonusFlag = cli.StringFlag{
+		Name:  "bonus",
+		Usage: "Total `<bonus>` for sip vote. Float number",
+	}
+
+	//network config
+	PublicAddrFlag = cli.StringFlag{
+		Name:  "public-addr",
+		Usage: "Public IP address",
+	}
+	IntractnetAddrFlag = cli.StringFlag{
+		Name:  "intractnet-addr",
+		Usage: "Intractnet IP address",
 	}
 )
 

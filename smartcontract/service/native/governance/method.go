@@ -19,14 +19,18 @@
 package governance
 
 import (
+	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"math/big"
 	"sort"
 
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/config"
 	"github.com/saveio/themis/common/constants"
+	"github.com/saveio/themis/common/log"
 	cstates "github.com/saveio/themis/core/states"
 	"github.com/saveio/themis/smartcontract/service/native"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
@@ -92,6 +96,7 @@ func registerCandidate(native *native.NativeService, flag string) error {
 		Address:    params.Address,
 		InitPos:    uint64(params.InitPos),
 		Status:     RegisterCandidateStatus,
+		Goverance:  params.Goverance,
 	}
 	peerPoolMap.PeerPoolMap[params.PeerPubkey] = peerPoolItem
 	err = putPeerPoolMap(native, contract, view, peerPoolMap)
@@ -683,6 +688,133 @@ func executeCommitDpos(native *native.NativeService, contract common.Address) er
 		return fmt.Errorf("putGovernanceView, put governanceView error: %v", err)
 	}
 
+	//update cons gov view
+	consGovView, err := GetConsGovView(native, contract)
+	if err != nil {
+		return fmt.Errorf("executeCommitDpos, get cons gov view error: %v", err)
+	}
+
+	if IsLastViewInConsGovPeriod(consGovView, view) {
+		runningStartView := consGovView.ReelectStartView + NUM_VIEW_PER_CONS_PLEDGE_PERIOD + NUM_VIEW_PER_CONS_ELECT_PERIOD
+		runningStartView += NUM_VIEW_PER_GOV_ELECT_PERIOD
+		reelectStartView := runningStartView + NUM_VIEW_PER_RUNNING_PERIOD
+
+		newConsGovView := &ConsGovView{
+			GovView:          consGovView.GovView + 1,
+			RunningStartView: runningStartView,
+			ReelectStartView: reelectStartView,
+		}
+		err = putConsGovView(native, contract, newConsGovView)
+		if err != nil {
+			return fmt.Errorf("putGovernanceView, put cons gov view error: %v", err)
+		}
+
+		log.Debugf("executeCommitDpos update cons gov view %v\n", newConsGovView)
+	}
+
+	return nil
+}
+
+func executeSplitEnhance(native *native.NativeService, contract common.Address, view uint32) error {
+	// get config
+	config, err := getConfig(native, contract)
+	if err != nil {
+		return fmt.Errorf("getConfig, get config error: %v", err)
+	}
+
+	//get peerPoolMap
+	peerPoolMap, err := GetPeerPoolMap(native, contract, view-1)
+	if err != nil {
+		return fmt.Errorf("executeSplit, get peerPoolMap error: %v", err)
+	}
+
+	gasRevenue, err := getGasRevenue(native, contract)
+	if err != nil {
+		return fmt.Errorf("executeSplit, getGasRevenue error: %v", err)
+	}
+	balance := gasRevenue.Total
+	//get globalParam
+	globalParam, err := getGlobalParam(native, contract)
+	if err != nil {
+		return fmt.Errorf("getGlobalParam, getGlobalParam error: %v", err)
+	}
+
+	peersCandidate := []*CandidateSplitInfo{}
+
+	for _, peerPoolItem := range peerPoolMap.PeerPoolMap {
+		if peerPoolItem.ConsStatus&InConsensusGroup == 0 {
+			continue
+		}
+
+		if peerPoolItem.Status == CandidateStatus || peerPoolItem.Status == ConsensusStatus {
+			stake := peerPoolItem.TotalPos + peerPoolItem.InitPos
+			peersCandidate = append(peersCandidate, &CandidateSplitInfo{
+				PeerPubkey: peerPoolItem.PeerPubkey,
+				InitPos:    peerPoolItem.InitPos,
+				Address:    peerPoolItem.Address,
+				Status:     peerPoolItem.Status,
+				Stake:      stake,
+			})
+		}
+	}
+
+	// sort peers by state and stake. ConsensusStatus > CandidateStatus
+	sort.SliceStable(peersCandidate, func(i, j int) bool {
+		if peersCandidate[i].Status > peersCandidate[j].Status {
+			return true
+		} else if peersCandidate[i].Stake > peersCandidate[j].Stake {
+			return true
+		} else if peersCandidate[i].Stake == peersCandidate[j].Stake {
+			return peersCandidate[i].PeerPubkey > peersCandidate[j].PeerPubkey
+		}
+		return false
+	})
+
+	// cal s of each consensus node
+	var sum uint64
+	for i := 0; i < int(config.K); i++ {
+		sum += peersCandidate[i].Stake
+	}
+	// if sum = 0, means consensus peer in config
+	if sum < uint64(config.K) {
+		//use same share for peer in config
+		sum = uint64(config.K)
+	}
+
+	//[PoC] just use deposit without Curve
+	for i := 0; i < int(config.K); i++ {
+		nodeAmount := balance * uint64(globalParam.A) / 100 * peersCandidate[i].Stake / sum
+		address := peersCandidate[i].Address
+
+		log.Debugf("executeSplitEnhance send %d bonus to consensus node: %s", nodeAmount, address.ToBase58())
+
+		err = appCallTransferRevenue(native, utils.GovernanceContractAddress, address, nodeAmount)
+		if err != nil {
+			return fmt.Errorf("executeSplitEnhance, bonus transfer error: %v", err)
+		}
+	}
+
+	//fee split of candidate peer
+	// cal s of each candidate node
+	sum = 0
+	for i := int(config.K); i < len(peersCandidate); i++ {
+		sum += peersCandidate[i].Stake
+	}
+	if sum == 0 {
+		return nil
+	}
+	for i := int(config.K); i < len(peersCandidate); i++ {
+		nodeAmount := balance * uint64(globalParam.B) / 100 * peersCandidate[i].Stake / sum
+		address := peersCandidate[i].Address
+
+		log.Debugf("executeSplitEnhance send %d bonus to candidate node: %s", nodeAmount, address.ToBase58())
+
+		err = appCallTransferRevenue(native, utils.GovernanceContractAddress, address, nodeAmount)
+		if err != nil {
+			return fmt.Errorf("executeSplitEnhance, bonus transfer error: %v", err)
+		}
+	}
+
 	return nil
 }
 
@@ -742,14 +874,24 @@ func executeSplit(native *native.NativeService, contract common.Address, view ui
 	}
 	// if sum = 0, means consensus peer in config, do not split
 	if sum < uint64(config.K) {
-		return nil
+		//use same share for peer in config
+		sum = uint64(config.K)
 	}
+
 	avg := sum / uint64(config.K)
 	var sumS uint64
 	for i := 0; i < int(config.K); i++ {
-		peersCandidate[i].S, err = splitCurve(native, contract, peersCandidate[i].Stake, avg, uint64(globalParam.Yita))
-		if err != nil {
-			return fmt.Errorf("splitCurve, calculate splitCurve error: %v", err)
+		//use same share when sum is 0
+		if sum == 0 {
+			peersCandidate[i].S, err = splitCurve(native, contract, 1, avg, uint64(globalParam.Yita))
+			if err != nil {
+				return fmt.Errorf("splitCurve, calculate splitCurve error: %v", err)
+			}
+		} else {
+			peersCandidate[i].S, err = splitCurve(native, contract, peersCandidate[i].Stake, avg, uint64(globalParam.Yita))
+			if err != nil {
+				return fmt.Errorf("splitCurve, calculate splitCurve error: %v", err)
+			}
 		}
 		sumS += peersCandidate[i].S
 	}
@@ -996,6 +1138,280 @@ func executePeerSplit(native *native.NativeService, contract common.Address, pee
 	if err != nil {
 		return fmt.Errorf("putSplitFeeAddress, putSplitFeeAddress error: %v", err)
 	}
+	return nil
+}
+
+//use consensus gov view when manage peer map
+func executeCommitDposEnhance(native *native.NativeService, contract common.Address) error {
+	//get governace view
+	governanceView, err := GetGovernanceView(native, contract)
+	if err != nil {
+		return fmt.Errorf("getGovernanceView, get GovernanceView error: %v", err)
+	}
+
+	//get current consensus gov view
+	view := governanceView.View
+	newView := view + 1
+
+	//feeSplit first
+	err = executeSplitEnhance(native, contract, view)
+	if err != nil {
+		return fmt.Errorf("executeCommitDposEnhance, executeSplitEnhance error: %v", err)
+	}
+
+	//update config
+	preConfig, err := getPreConfig(native, contract)
+	if err != nil {
+		return fmt.Errorf("getPreConfig, get preConfig error: %v", err)
+	}
+	if preConfig.SetView == view {
+		err = putConfig(native, contract, preConfig.Configuration)
+		if err != nil {
+			return fmt.Errorf("putConfig, put config error: %v", err)
+		}
+	}
+
+	//get peerPoolMap
+	peerPoolMap, err := GetPeerPoolMap(native, contract, view)
+	if err != nil {
+		return fmt.Errorf("getPeerPoolMap, get peerPoolMap error: %v", err)
+	}
+
+	var peers []*PeerStakeInfo
+	var peersSkip []*PeerStakeInfo
+	var items *ConsGroupItems
+
+	govView, err := GetConsGovView(native, contract)
+	if err != nil {
+		return fmt.Errorf("GetConsGovView error: %v", err)
+	}
+
+	last := IsLastViewInConsGovPeriod(govView, view)
+	if last {
+		//ConsGroupItems will ensure nodes > consensus group size
+		items, err = GetConsGroupItems(native, contract, govView.GovView+1)
+
+		if err != nil {
+			return fmt.Errorf("GetConsGroupItems, get cons group items error: %v", err)
+		}
+
+		for pubkey, _ := range items.ConsGroupItems {
+			log.Debugf("executeCommitDposEnhance GetConsGroupItems pubkey:%s", pubkey)
+		}
+	}
+
+	for _, peerPoolItem := range peerPoolMap.PeerPoolMap {
+		if peerPoolItem.Status == QuitingStatus {
+			err = normalQuit(native, contract, peerPoolItem)
+			if err != nil {
+				return fmt.Errorf("normalQuit, normalQuit error: %v", err)
+			}
+			delete(peerPoolMap.PeerPoolMap, peerPoolItem.PeerPubkey)
+		}
+		if peerPoolItem.Status == BlackStatus {
+			err = blackQuit(native, contract, peerPoolItem)
+			if err != nil {
+				return fmt.Errorf("blackQuit, blackQuit error: %v", err)
+			}
+			delete(peerPoolMap.PeerPoolMap, peerPoolItem.PeerPubkey)
+		}
+		if peerPoolItem.Status == QuitConsensusStatus {
+			peerPoolItem.Status = QuitingStatus
+			peerPoolMap.PeerPoolMap[peerPoolItem.PeerPubkey] = peerPoolItem
+		}
+
+		//only nodes in cons group of next gov view envolve
+		if last {
+			if _, ok := items.ConsGroupItems[peerPoolItem.PeerPubkey]; !ok {
+				if peerPoolItem.Status == CandidateStatus || peerPoolItem.Status == ConsensusStatus {
+					stake := peerPoolItem.TotalPos + peerPoolItem.InitPos
+					peersSkip = append(peersSkip, &PeerStakeInfo{
+						Index:      peerPoolItem.Index,
+						PeerPubkey: peerPoolItem.PeerPubkey,
+						Stake:      stake,
+					})
+				}
+				continue
+			}
+		} else {
+			//only item in consensus group of current view take part in consensus switch.
+			if peerPoolItem.ConsStatus&InConsensusGroup == 0 {
+				log.Debugf("executeCommitDposEnhance item with index %d not in consensus group, skip", peerPoolItem.Index)
+				continue
+			}
+		}
+
+		if peerPoolItem.Status == CandidateStatus || peerPoolItem.Status == ConsensusStatus {
+			stake := peerPoolItem.TotalPos + peerPoolItem.InitPos
+			peers = append(peers, &PeerStakeInfo{
+				Index:      peerPoolItem.Index,
+				PeerPubkey: peerPoolItem.PeerPubkey,
+				Stake:      stake,
+			})
+		}
+	}
+	// get config
+	config, err := getConfig(native, contract)
+	if err != nil {
+		return fmt.Errorf("getConfig, get config error: %v", err)
+	}
+	if len(peers) < int(config.K) {
+		return fmt.Errorf("commitDpos, num of peers is less than K")
+	}
+
+	// sort peers by stake then pubkey
+	sort.SliceStable(peers, func(i, j int) bool {
+		if peers[i].Stake > peers[j].Stake {
+			return true
+		} else if peers[i].Stake == peers[j].Stake {
+			return peers[i].PeerPubkey > peers[j].PeerPubkey
+		}
+		return false
+	})
+
+	//shuffle with latest poc winner info
+	log.Debugf("executeCommitDposEnhance finish sorting using deposit info of view:%d", view)
+	for i := 0; i < len(peers); i++ {
+		log.Debugf("peer[%d] Index %d", i, peers[i].Index)
+	}
+
+	winnerInfo, err := getWinnerInfo(native, contract, view)
+	if err != nil {
+		return fmt.Errorf("executeCommitDposEnhance, get winnerInfo for view %d error: %v", view, err)
+	}
+
+	bf := new(bytes.Buffer)
+	if err = winnerInfo.Serialize(bf); err != nil {
+		return fmt.Errorf("executeCommitDposEnhance, serialize miningInfo error: %v", err)
+	}
+	info := bf.Bytes()
+
+	hash := fnv.New64a()
+
+	for i := len(peers) - 1; i > 0; i-- {
+		data, err := json.Marshal(struct {
+			Info  []byte `json:"info"`
+			View  uint32 `json:"view"`
+			Index int    `json:"index"`
+		}{info, view, i})
+		if err != nil {
+			return fmt.Errorf("executeCommitDposEnhance, generate random num error: %v", err)
+		}
+
+		hash.Reset()
+		hash.Write(data)
+		h := hash.Sum64()
+		j := h % uint64(i)
+		peers[i], peers[j] = peers[j], peers[i]
+	}
+	log.Debugf("executeCommitDposEnhance finish shuffle using poc winner info of view:%d", view)
+
+	for i := 0; i < len(peers); i++ {
+		log.Debugf("peer[%d] Index %d\n", i, peers[i].Index)
+	}
+
+	// consensus peers
+	for i := 0; i < int(config.K); i++ {
+		peerPoolItem, ok := peerPoolMap.PeerPoolMap[peers[i].PeerPubkey]
+		if !ok {
+			return fmt.Errorf("executeCommitDposEnhance, peerPubkey is not in peerPoolMap")
+		}
+
+		if peerPoolItem.Status == ConsensusStatus {
+			err = consensusToConsensus(native, contract, peerPoolItem)
+			if err != nil {
+				return fmt.Errorf("consensusToConsensus, consensusToConsensus error: %v", err)
+			}
+		} else {
+			err = unConsensusToConsensus(native, contract, peerPoolItem)
+			if err != nil {
+				return fmt.Errorf("unConsensusToConsensus, unConsensusToConsensus error: %v", err)
+			}
+		}
+		peerPoolItem.Status = ConsensusStatus
+		peerPoolMap.PeerPoolMap[peers[i].PeerPubkey] = peerPoolItem
+	}
+
+	//non consensus peers
+	for i := int(config.K); i < len(peers); i++ {
+		peerPoolItem, ok := peerPoolMap.PeerPoolMap[peers[i].PeerPubkey]
+		if !ok {
+			return fmt.Errorf("authorizeForPeer, peerPubkey is not in peerPoolMap")
+		}
+
+		if peerPoolItem.Status == ConsensusStatus {
+			err = consensusToUnConsensus(native, contract, peerPoolItem)
+			if err != nil {
+				return fmt.Errorf("consensusToUnConsensus, consensusToUnConsensus error: %v", err)
+			}
+		} else {
+			err = unConsensusToUnConsensus(native, contract, peerPoolItem)
+			if err != nil {
+				return fmt.Errorf("unConsensusToUnConsensus, unConsensusToUnConsensus error: %v", err)
+			}
+		}
+		peerPoolItem.Status = CandidateStatus
+		peerPoolMap.PeerPoolMap[peers[i].PeerPubkey] = peerPoolItem
+	}
+
+	//non consensus peers due to switch consensus gov period
+	if last {
+		for i := 0; i < len(peersSkip); i++ {
+			peerPoolItem, ok := peerPoolMap.PeerPoolMap[peersSkip[i].PeerPubkey]
+			if !ok {
+				return fmt.Errorf("authorizeForPeer, peerPubkey is not in peerPoolMap")
+			}
+
+			if peerPoolItem.Status == ConsensusStatus {
+				err = consensusToUnConsensus(native, contract, peerPoolItem)
+				if err != nil {
+					return fmt.Errorf("consensusToUnConsensus, consensusToUnConsensus error: %v", err)
+				}
+			} else {
+				err = unConsensusToUnConsensus(native, contract, peerPoolItem)
+				if err != nil {
+					return fmt.Errorf("unConsensusToUnConsensus, unConsensusToUnConsensus error: %v", err)
+				}
+			}
+			peerPoolItem.Status = CandidateStatus
+			peerPoolMap.PeerPoolMap[peersSkip[i].PeerPubkey] = peerPoolItem
+		}
+	}
+
+	//1. adjust the peerMap for last view of cons gov period
+	//2. write peerMap for view
+	//3. prepare cons map for next gov view
+	if last {
+		for pubKey, peer := range peerPoolMap.PeerPoolMap {
+			if _, ok := items.ConsGroupItems[pubKey]; ok {
+				peer.ConsStatus = InConsensusGroup
+				log.Debugf("executeCommitDposEnhance set InConsensusGroup for:%s", pubKey)
+
+			} else {
+				peer.ConsStatus = EmptyStatus
+				log.Debugf("executeCommitDposEnhance clear InConsensusGroup for:%s", pubKey)
+			}
+		}
+
+		for pubKey, peer := range peerPoolMap.PeerPoolMap {
+			log.Debugf("executeCommitDposEnhance pubkey:%s, ConsStatus:%d", pubKey, peer.ConsStatus)
+		}
+	}
+
+	//overwrite peerMap of view to make ExecuteSplitEnhance easy
+	err = putPeerPoolMap(native, contract, view, peerPoolMap)
+	if err != nil {
+		return fmt.Errorf("putPeerPoolMap, put peerPoolMap error: %v", err)
+	}
+
+	err = putPeerPoolMap(native, contract, newView, peerPoolMap)
+	if err != nil {
+		return fmt.Errorf("putPeerPoolMap, put peerPoolMap error: %v", err)
+	}
+	oldView := view - 1
+	oldViewBytes := GetUint32Bytes(oldView)
+	native.CacheDB.Delete(utils.ConcatKey(contract, []byte(PEER_POOL), oldViewBytes))
+
 	return nil
 }
 

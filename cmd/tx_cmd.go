@@ -86,6 +86,7 @@ var TxCommond = cli.Command{
 		TransferFromTxCommond,
 		ApproveCandidateTxCommond,
 		UpdateConfigTxCommond,
+		RegisterSipTxCommond,
 	},
 	Description: "Build transaction",
 }
@@ -176,6 +177,24 @@ var UpdateConfigTxCommond = cli.Command{
 		utils.ConfigHashMsgDelayFlag,
 		utils.ConfigPeerHandshakeTimeoutFlag,
 		utils.ConfigMaxBlockChangeViewFlag,
+	},
+}
+
+var RegisterSipTxCommond = cli.Command{
+	Name:        "regsip",
+	Usage:       "Build register sip transaction",
+	Description: "Build transaction for register sip.",
+	Action:      registerSipTx,
+	Flags: []cli.Flag{
+		utils.WalletFileFlag,
+		utils.TransactionGasPriceFlag,
+		utils.TransactionGasLimitFlag,
+		utils.TransactionPayerFlag,
+
+		utils.SipHeightFlag,
+		utils.SipDetailFlag,
+		utils.SipMinVotesFlag,
+		utils.SipBonusFlag,
 	},
 }
 
@@ -513,6 +532,62 @@ func updateConfigTx(ctx *cli.Context) error {
 	tx.Serialization(&sink)
 
 	PrintInfoMsg("Update config raw tx:")
+	PrintInfoMsg(hex.EncodeToString(sink.Bytes()))
+	return nil
+}
+
+//sip cmd
+func registerSipTx(ctx *cli.Context) error {
+	var err error
+
+	payerAddr := ctx.String(utils.GetFlagName(utils.TransactionPayerFlag))
+	height := ctx.Uint64(utils.GetFlagName(utils.SipHeightFlag))
+	detail := ctx.String(utils.GetFlagName(utils.SipDetailFlag))
+	minVotes := ctx.Uint64(utils.GetFlagName(utils.SipMinVotesFlag))
+
+	if payerAddr == "" ||
+		height == 0 ||
+		detail == "" ||
+		minVotes == 0 {
+		PrintErrorMsg("Missing %s,%s,%s or %s argument.", utils.TransactionPayerFlag.Name,
+			utils.SipHeightFlag.Name, utils.SipDetailFlag.Name, utils.SipMinVotesFlag.Name)
+		cli.ShowSubcommandHelp(ctx)
+		return nil
+	}
+
+	var payer common.Address
+	if payerAddr != "" {
+		payerAddr, err = cmdcom.ParseAddress(payerAddr, ctx)
+		if err != nil {
+			return err
+		}
+	}
+	payer, err = common.AddressFromBase58(payerAddr)
+	if err != nil {
+		return fmt.Errorf("invalid payer address:%s", err)
+	}
+
+	gasPrice := ctx.Uint64(utils.TransactionGasPriceFlag.Name)
+	gasLimit := ctx.Uint64(utils.TransactionGasLimitFlag.Name)
+
+	bonusStr := ctx.String(utils.SipBonusFlag.Name)
+	bonus := utils.ParseUsdt(bonusStr)
+
+	mutTx, err := utils.RegisterSipTx(gasPrice, gasLimit, uint32(height), detail, uint32(minVotes), bonus)
+	if err != nil {
+		return err
+	}
+
+	mutTx.Payer = payer
+
+	tx, err := mutTx.IntoImmutable()
+	if err != nil {
+		return fmt.Errorf("IntoImmutable error:%s", err)
+	}
+	sink := common.ZeroCopySink{}
+	tx.Serialization(&sink)
+
+	PrintInfoMsg("Register Sip raw tx:")
 	PrintInfoMsg(hex.EncodeToString(sink.Bytes()))
 	return nil
 }

@@ -202,11 +202,24 @@ func newGoverningInit() *types.Transaction {
 		addr = temp
 	}
 
-	distribute := []struct {
+	var distribute []struct {
 		addr  common.Address
 		value uint64
-	}{{addr, constants.USDT_TOTAL_SUPPLY}}
-	log.Infof("distribute %v to %v", constants.USDT_TOTAL_SUPPLY, addr)
+	}
+
+	if len(bookkeepers) == 1 {
+		distribute = []struct {
+			addr  common.Address
+			value uint64
+		}{{addr, constants.USDT_TOTAL_SUPPLY}}
+		log.Infof("distribute %v to %v", constants.USDT_TOTAL_SUPPLY, addr)
+	} else {
+		distribute = []struct {
+			addr  common.Address
+			value uint64
+		}{{nutils.GovernanceContractAddress, constants.USDT_TOTAL_SUPPLY}}
+		log.Infof("distribute %v to %v", constants.USDT_TOTAL_SUPPLY, nutils.GovernanceContractAddress)
+	}
 
 	args := common.NewZeroCopySink(nil)
 	nutils.EncodeVarUint(args, uint64(len(distribute)))

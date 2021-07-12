@@ -20,18 +20,21 @@ package governance
 
 import (
 	"fmt"
+	"io"
 	"math"
 
 	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/common/serialization"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
 
 type RegisterCandidateParam struct {
 	PeerPubkey string
 	Address    common.Address
-	InitPos    uint32
+	InitPos    uint64
 	Caller     []byte
 	KeyNo      uint32
+	Goverance  bool
 }
 
 func (this *RegisterCandidateParam) Serialization(sink *common.ZeroCopySink) {
@@ -40,6 +43,7 @@ func (this *RegisterCandidateParam) Serialization(sink *common.ZeroCopySink) {
 	utils.EncodeVarUint(sink, uint64(this.InitPos))
 	sink.WriteVarBytes(this.Caller)
 	utils.EncodeVarUint(sink, uint64(this.KeyNo))
+	sink.WriteBool(this.Goverance)
 }
 
 func (this *RegisterCandidateParam) Deserialization(source *common.ZeroCopySource) error {
@@ -69,11 +73,16 @@ func (this *RegisterCandidateParam) Deserialization(source *common.ZeroCopySourc
 	if keyNo > math.MaxUint32 {
 		return fmt.Errorf("initPos larger than max of uint32")
 	}
+	gov, err := utils.DecodeBool(source)
+	if err != nil {
+		return fmt.Errorf("utils.ReadBool deserialize goverance error:%v", err)
+	}
 	this.PeerPubkey = peerPubkey
 	this.Address = address
-	this.InitPos = uint32(initPos)
+	this.InitPos = uint64(initPos)
 	this.Caller = caller
 	this.KeyNo = uint32(keyNo)
+	this.Goverance = gov
 	return nil
 }
 
@@ -462,14 +471,18 @@ func (this *PreConfig) Deserialization(source *common.ZeroCopySource) error {
 }
 
 type GlobalParam struct {
-	CandidateFee uint64 //unit: 10^-9 ong
-	MinInitStake uint64 //min init pos
-	CandidateNum uint32 //num of candidate and consensus node
-	PosLimit     uint32 //authorize pos limit is initPos*posLimit
-	A            uint32 //fee split to all consensus node
-	B            uint32 //fee split to all candidate node
-	Yita         uint32 //split curve coefficient
-	Penalty      uint32 //authorize pos penalty percentage
+	CandidateFee  uint64 //unit: 10^-9 ong
+	MinInitStake  uint64 //min init pos
+	CandidateNum  uint32 //num of candidate and consensus node
+	PosLimit      uint32 //authorize pos limit is initPos*posLimit
+	A             uint32 //fee split to all consensus node
+	B             uint32 //fee split to all candidate node
+	Yita          uint32 //split curve coefficient
+	Penalty       uint32 //authorize pos penalty percentage
+	ConsGroupSize uint32 //number of node in consensus group
+	Cons          uint32 //mining bonus split to all consensus node
+	Votes         uint32 //mining bonus split to all vote node
+	PoC           uint32 //mining bonus split to poc node
 }
 
 func (this *GlobalParam) Serialization(sink *common.ZeroCopySink) {
@@ -481,6 +494,10 @@ func (this *GlobalParam) Serialization(sink *common.ZeroCopySink) {
 	utils.EncodeVarUint(sink, uint64(this.B))
 	utils.EncodeVarUint(sink, uint64(this.Yita))
 	utils.EncodeVarUint(sink, uint64(this.Penalty))
+	utils.EncodeVarUint(sink, uint64(this.ConsGroupSize))
+	utils.EncodeVarUint(sink, uint64(this.Cons))
+	utils.EncodeVarUint(sink, uint64(this.Votes))
+	utils.EncodeVarUint(sink, uint64(this.PoC))
 }
 
 func (this *GlobalParam) Deserialization(source *common.ZeroCopySource) error {
@@ -516,6 +533,22 @@ func (this *GlobalParam) Deserialization(source *common.ZeroCopySource) error {
 	if err != nil {
 		return fmt.Errorf("utils.ReadVarUint, deserialize penalty error: %v", err)
 	}
+	consGroupSize, err := utils.DecodeVarUint(source)
+	if err != nil {
+		return fmt.Errorf("utils.ReadVarUint, deserialize consGroupSize error: %v", err)
+	}
+	cons, err := utils.DecodeVarUint(source)
+	if err != nil {
+		return fmt.Errorf("utils.ReadVarUint, deserialize cons error: %v", err)
+	}
+	votes, err := utils.DecodeVarUint(source)
+	if err != nil {
+		return fmt.Errorf("utils.ReadVarUint, deserialize votes error: %v", err)
+	}
+	poc, err := utils.DecodeVarUint(source)
+	if err != nil {
+		return fmt.Errorf("utils.ReadVarUint, deserialize poc error: %v", err)
+	}
 	if minInitStake > math.MaxUint32 {
 		return fmt.Errorf("minInitStake larger than max of uint32")
 	}
@@ -537,6 +570,9 @@ func (this *GlobalParam) Deserialization(source *common.ZeroCopySource) error {
 	if penalty > math.MaxUint32 {
 		return fmt.Errorf("penalty larger than max of uint32")
 	}
+	if cons+votes+poc != 100 {
+		return fmt.Errorf("sum of cons,votes and poc must be 100")
+	}
 	this.CandidateFee = candidateFee
 	this.MinInitStake = uint64(minInitStake)
 	this.CandidateNum = uint32(candidateNum)
@@ -545,6 +581,10 @@ func (this *GlobalParam) Deserialization(source *common.ZeroCopySource) error {
 	this.B = uint32(b)
 	this.Yita = uint32(yita)
 	this.Penalty = uint32(penalty)
+	this.ConsGroupSize = uint32(consGroupSize)
+	this.Cons = uint32(cons)
+	this.Votes = uint32(votes)
+	this.PoC = uint32(poc)
 	return nil
 }
 
@@ -914,5 +954,46 @@ func (this *GasAddress) Deserialization(source *common.ZeroCopySource) error {
 		return fmt.Errorf("utils.DecodeAddress, deserialize address error: %v", err)
 	}
 	this.Address = address
+	return nil
+}
+
+type ApplyForElectParam struct {
+	PeerPubkey  string
+	Address     common.Address
+	ConsGovView uint32
+}
+
+func (this *ApplyForElectParam) Serialize(w io.Writer) error {
+	if err := serialization.WriteString(w, this.PeerPubkey); err != nil {
+		return fmt.Errorf("serialization.WriteString, serialize peerPubkey error: %v", err)
+	}
+	if err := serialization.WriteVarBytes(w, this.Address[:]); err != nil {
+		return fmt.Errorf("serialization.WriteVarBytes, serialize address error: %v", err)
+	}
+	if err := utils.WriteVarUint(w, uint64(this.ConsGovView)); err != nil {
+		return fmt.Errorf("utils.WriteVarUint, serialize view error: %v", err)
+	}
+
+	return nil
+}
+
+func (this *ApplyForElectParam) Deserialize(r io.Reader) error {
+	peerPubkey, err := serialization.ReadString(r)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadString, deserialize peerPubkey error: %v", err)
+	}
+	address, err := utils.ReadAddress(r)
+	if err != nil {
+		return fmt.Errorf("utils.ReadAddress, deserialize address error: %v", err)
+	}
+	view, err := utils.ReadVarUint(r)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadVarUint, deserialize applyForElect error: %v", err)
+	}
+
+	this.PeerPubkey = peerPubkey
+	this.Address = address
+	this.ConsGovView = uint32(view)
+
 	return nil
 }

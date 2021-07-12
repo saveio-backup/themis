@@ -29,10 +29,10 @@ import (
 	"math/big"
 	"math/bits"
 
-	"github.com/saveio/themis/crypto/keypair"
 	"github.com/saveio/themis/account"
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/core/types"
+	"github.com/saveio/themis/crypto/keypair"
 )
 
 var Difficulty = 18 //bit

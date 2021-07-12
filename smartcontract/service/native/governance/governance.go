@@ -22,6 +22,7 @@
 package governance
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -30,6 +31,7 @@ import (
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/config"
 	"github.com/saveio/themis/common/constants"
+	"github.com/saveio/themis/common/log"
 	cstates "github.com/saveio/themis/core/states"
 	"github.com/saveio/themis/core/types"
 	"github.com/saveio/themis/crypto/keypair"
@@ -49,38 +51,43 @@ const (
 )
 
 const (
+	//consensus group flag
+	EmptyStatus       ConsStatus = iota
+	InConsensusGroup             = 0x1
+	ElectForConsensus            = 0x2
+)
+
+const (
 	//function name
-	INIT_CONFIG                      = "initConfig"
-	REGISTER_CANDIDATE               = "registerCandidate"
-	REGISTER_CANDIDATE_TRANSFER_FROM = "registerCandidateTransferFrom"
-	UNREGISTER_CANDIDATE             = "unRegisterCandidate"
-	AUTHORIZE_FOR_PEER               = "authorizeForPeer"
-	AUTHORIZE_FOR_PEER_TRANSFER_FROM = "authorizeForPeerTransferFrom"
-	UNAUTHORIZE_FOR_PEER             = "unAuthorizeForPeer"
-	APPROVE_CANDIDATE                = "approveCandidate"
-	REJECT_CANDIDATE                 = "rejectCandidate"
-	BLACK_NODE                       = "blackNode"
-	WHITE_NODE                       = "whiteNode"
-	QUIT_NODE                        = "quitNode"
-	WITHDRAW                         = "withdraw"
-	WITHDRAW_FEE                     = "withdrawFee"
-	COMMIT_DPOS                      = "commitDpos"
-	UPDATE_CONFIG                    = "updateConfig"
-	UPDATE_GLOBAL_PARAM              = "updateGlobalParam"
-	UPDATE_GLOBAL_PARAM2             = "updateGlobalParam2"
-	UPDATE_SPLIT_CURVE               = "updateSplitCurve"
-	TRANSFER_PENALTY                 = "transferPenalty"
-	CHANGE_MAX_AUTHORIZATION         = "changeMaxAuthorization"
-	SET_PEER_COST                    = "setPeerCost"
-	SET_FEE_PERCENTAGE               = "setFeePercentage"
-	ADD_INIT_POS                     = "addInitPos"
-	REDUCE_INIT_POS                  = "reduceInitPos"
-	SET_PROMISE_POS                  = "setPromisePos"
-	SET_GAS_ADDRESS                  = "setGasAddress"
-	GET_PEER_POOL                    = "getPeerPool"
-	GET_PEER_INFO                    = "getPeerInfo"
-	GET_PEER_POOL_BY_ADDRESS         = "getPeerPoolByAddress"
-	GAS_REVENUE                      = "gasRevenue"
+	INIT_CONFIG        = "initConfig"
+	REGISTER_CANDIDATE = "registerCandidate"
+	//REGISTER_CANDIDATE_TRANSFER_FROM = "registerCandidateTransferFrom"
+	UNREGISTER_CANDIDATE = "unRegisterCandidate"
+	//AUTHORIZE_FOR_PEER               = "authorizeForPeer"
+	//AUTHORIZE_FOR_PEER_TRANSFER_FROM = "authorizeForPeerTransferFrom"
+	//UNAUTHORIZE_FOR_PEER             = "unAuthorizeForPeer"
+	APPROVE_CANDIDATE = "approveCandidate"
+	REJECT_CANDIDATE  = "rejectCandidate"
+	BLACK_NODE        = "blackNode"
+	WHITE_NODE        = "whiteNode"
+	QUIT_NODE         = "quitNode"
+	WITHDRAW          = "withdraw"
+	//WITHDRAW_ONG             = "withdrawOng"
+	WITHDRAW_FEE         = "withdrawFee"
+	COMMIT_DPOS          = "commitDpos"
+	UPDATE_CONFIG        = "updateConfig"
+	UPDATE_GLOBAL_PARAM  = "updateGlobalParam"
+	UPDATE_GLOBAL_PARAM2 = "updateGlobalParam2"
+	UPDATE_SPLIT_CURVE   = "updateSplitCurve"
+	TRANSFER_PENALTY     = "transferPenalty"
+	//CHANGE_MAX_AUTHORIZATION = "changeMaxAuthorization"
+	//SET_PEER_COST   = "setPeerCost"
+	ADD_INIT_POS        = "addInitPos"
+	REDUCE_INIT_POS     = "reduceInitPos"
+	SET_PROMISE_POS     = "setPromisePos"
+	GET_GAS_REVENUE     = "getGasRevenue"
+	APPLY_FOR_ELECT     = "applyForElect"
+	QUERY_CONS_GOV_VIEW = "queryConsGovView"
 
 	//key prefix
 	GLOBAL_PARAM      = "globalParam"
@@ -99,6 +106,8 @@ const (
 	SPLIT_FEE_ADDRESS = "splitFeeAddress"
 	PROMISE_POS       = "promisePos"
 	PRE_CONFIG        = "preConfig"
+	GAS_REVENUE       = "gasRevenue"
+	CONS_GOV_VIEW     = "consGovView"
 	GAS_ADDRESS       = "gasAddress"
 
 	//global
@@ -149,18 +158,23 @@ func RegisterGovernanceContract(native *native.NativeService) {
 	native.Register(REJECT_CANDIDATE, RejectCandidate)
 	native.Register(BLACK_NODE, BlackNode)
 	native.Register(WHITE_NODE, WhiteNode)
-	native.Register(COMMIT_DPOS, CommitDpos)
+	//native.Register(COMMIT_DPOS, CommitDpos)
+	native.Register(COMMIT_DPOS, CommitDposEnhance)
 	native.Register(UPDATE_CONFIG, UpdateConfig)
 	native.Register(UPDATE_GLOBAL_PARAM, UpdateGlobalParam)
 	native.Register(UPDATE_GLOBAL_PARAM2, UpdateGlobalParam2)
 	native.Register(UPDATE_SPLIT_CURVE, UpdateSplitCurve)
 	native.Register(TRANSFER_PENALTY, TransferPenalty)
 	native.Register(SET_PROMISE_POS, SetPromisePos)
-	native.Register(SET_GAS_ADDRESS, SetGasAddress)
+	native.Register(GET_GAS_REVENUE, GetGasRevenue)
+	native.Register(APPLY_FOR_ELECT, ApplyForElect)
+	native.Register(CONS_GOV_VIEW, QueryConsGovView)
 
-	native.Register(GET_PEER_POOL, GetPeerPool)
-	native.Register(GET_PEER_INFO, GetPeerInfo)
-	native.Register(GET_PEER_POOL_BY_ADDRESS, GetPeerPoolByAddress)
+	//register PoC method
+	RegisterPoCContract(native)
+
+	//register SIP method
+	RegisterSIPContract(native)
 }
 
 //Init governance contract, include vbft config, global param and ontid admin.
@@ -184,6 +198,13 @@ func InitConfig(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, fmt.Errorf("initConfig. initConfig is already executed")
 	}
 
+	// initialize gas revenue to 0
+	gasRevenue := &GasRevenue{Total: 0}
+	err = putGasRevenue(native, contract, gasRevenue)
+	if err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("initConfig. put gasRevenue error: %v", err)
+	}
+
 	//check the configuration
 	err = CheckVBFTConfig(configuration)
 	if err != nil {
@@ -192,14 +213,18 @@ func InitConfig(native *native.NativeService) ([]byte, error) {
 
 	//init globalParam
 	globalParam := &GlobalParam{
-		CandidateFee: 500000000000,
-		MinInitStake: configuration.MinInitStake,
-		CandidateNum: 7 * 7,
-		PosLimit:     20,
-		A:            50,
-		B:            50,
-		Yita:         5,
-		Penalty:      5,
+		CandidateFee:  500000000000,
+		MinInitStake:  configuration.MinInitStake,
+		CandidateNum:  7 * 7,
+		PosLimit:      20,
+		A:             50,
+		B:             50,
+		Yita:          5,
+		Penalty:       5,
+		ConsGroupSize: configuration.K,
+		Cons:          10,
+		Votes:         5,
+		PoC:           85,
 	}
 	err = putGlobalParam(native, contract, globalParam)
 	if err != nil {
@@ -229,6 +254,7 @@ func InitConfig(native *native.NativeService) ([]byte, error) {
 		peerPoolItem.TotalPos = 0
 		peerPoolItem.Status = ConsensusStatus
 		peerPoolMap.PeerPoolMap[peerPoolItem.PeerPubkey] = peerPoolItem
+		peerPoolItem.ConsStatus |= InConsensusGroup
 
 		peerPubkeyPrefix, err := hex.DecodeString(peerPoolItem.PeerPubkey)
 		if err != nil {
@@ -305,6 +331,38 @@ func InitConfig(native *native.NativeService) ([]byte, error) {
 	err = appCallInitContractAdmin(native, []byte(configuration.AdminOntID))
 	if err != nil {
 		return utils.BYTE_FALSE, fmt.Errorf("appCallInitContractAdmin error: %v", err)
+	}
+
+	//init consensus gov view
+	consGovView := &ConsGovView{
+		GovView:          1,
+		RunningStartView: 1,
+		ReelectStartView: NUM_VIEW_PER_RUNNING_PERIOD + 1,
+	}
+	err = putConsGovView(native, contract, consGovView)
+	if err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("putConsGovView, put cons gov view error: %v", err)
+	}
+
+	//init default consensus nodes
+	defNodes := &DefaultConsNodes{
+		DefaultConsNodes: make(map[string]int),
+	}
+	for _, peer := range peerPoolMap.PeerPoolMap {
+		defNodes.DefaultConsNodes[peer.PeerPubkey] = 1
+	}
+	putDefConsNodes(native, contract, defNodes)
+
+	//init PoC logic
+	_, err = InitPoCConfig(native)
+	if err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("InitPoCConfig error: %v", err)
+	}
+
+	//init Sip logic
+	_, err = InitSIPConfig(native)
+	if err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("InitSIPConfig error: %v", err)
 	}
 
 	return utils.BYTE_TRUE, nil
@@ -1011,6 +1069,30 @@ func CommitDpos(native *native.NativeService) ([]byte, error) {
 	return utils.BYTE_TRUE, nil
 }
 
+//Go to next consensus epoch
+func CommitDposEnhance(native *native.NativeService) ([]byte, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	//get governace view
+	governanceView, err := GetGovernanceView(native, contract)
+	if err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("getGovernanceView, get GovernanceView error: %v", err)
+	}
+
+	//disable admin trigger view change!!
+	cycle := (native.Height - governanceView.Height) >= NUM_BLOCK_PER_VIEW
+	if !cycle {
+		return utils.BYTE_FALSE, fmt.Errorf("commitDpos, authentication Failed")
+	}
+
+	err = executeCommitDpos(native, contract)
+	if err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("executeCommitDpos, executeCommitDpos error: %v", err)
+	}
+
+	return utils.BYTE_TRUE, nil
+}
+
 //Update VBFT config
 func UpdateConfig(native *native.NativeService) ([]byte, error) {
 	// get admin from database
@@ -1139,12 +1221,10 @@ func UpdateGlobalParam(native *native.NativeService) ([]byte, error) {
 	if globalParam.CandidateNum < 4*config.K {
 		return utils.BYTE_FALSE, fmt.Errorf("updateGlobalParam. CandidateNum must >= 4*K")
 	}
-	if globalParam.CandidateFee != 0 && globalParam.CandidateFee < MIN_CANDIDATE_FEE {
-		return utils.BYTE_FALSE, fmt.Errorf("updateGlobalParam. CandidateFee must >= %d", MIN_CANDIDATE_FEE)
+	if (globalParam.Cons + globalParam.Votes + globalParam.PoC) != 100 {
+		return utils.BYTE_FALSE, fmt.Errorf("updateGlobalParam. Cons + Votes + PoC must equal to 100")
 	}
-	if globalParam.MinInitStake < 1 {
-		return utils.BYTE_FALSE, fmt.Errorf("updateGlobalParam. MinInitStake must >= 1")
-	}
+
 	err = putGlobalParam(native, contract, globalParam)
 	if err != nil {
 		return utils.BYTE_FALSE, fmt.Errorf("putGlobalParam, put globalParam error: %v", err)
@@ -1177,6 +1257,10 @@ func UpdateGlobalParam2(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, fmt.Errorf("deserialize, deserialize globalParam2 error: %v", err)
 	}
 
+	//check the globalParam
+	if globalParam2.MinAuthorizePos == 0 {
+		return utils.BYTE_FALSE, fmt.Errorf("globalParam2.MinAuthorizePos can not be 0")
+	}
 	// get config
 	config, err := getConfig(native, contract)
 	if err != nil {
@@ -1832,4 +1916,89 @@ func GetPeerPoolForVm(native *native.NativeService) (*PeerPoolListForVm, error) 
 		PeerPoolList: peerPoolList,
 	}
 	return peerPoolListForVm, nil
+}
+
+func GetGasRevenue(native *native.NativeService) ([]byte, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+	gasRevenueBytes, err := native.CacheDB.Get(utils.ConcatKey(contract, []byte(GAS_REVENUE)))
+	if err != nil {
+		return nil, fmt.Errorf("GetGasRevenue, get gasRevenueBytes error: %v", err)
+	}
+	return gasRevenueBytes, nil
+
+}
+
+func ApplyForElect(native *native.NativeService) ([]byte, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+	params := new(ApplyForElectParam)
+	if err := params.Deserialize(bytes.NewBuffer(native.Input)); err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("deserialize, deserialize ApplyForElectParam error: %v", err)
+	}
+
+	log.Debugf("ApplyForElect peer with pubkey %s apply for elect in gov view %d", params.PeerPubkey, params.ConsGovView)
+
+	//check witness
+	err := utils.ValidateOwner(native, params.Address)
+	if err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("validateOwner, checkWitness error: %v", err)
+	}
+
+	//check if is peer owner
+	//get current view
+	view, err := GetView(native, contract)
+	if err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("getView, get view error: %v", err)
+	}
+
+	//get peerPoolMap
+	peerPoolMap, err := GetPeerPoolMap(native, contract, view)
+	if err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("getPeerPoolMap, get peerPoolMap error: %v", err)
+	}
+	peerPoolItem, ok := peerPoolMap.PeerPoolMap[params.PeerPubkey]
+	if !ok {
+		return utils.BYTE_FALSE, fmt.Errorf("ApplyForElect, peerPubkey is not in peerPoolMap")
+	}
+	if peerPoolItem.Address != params.Address {
+		return utils.BYTE_FALSE, fmt.Errorf("address is not peer owner")
+	}
+
+	curGovView, err := GetConsGovView(native, contract)
+	if err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("GetConsGovView, get consensus goverance view error: %v", err)
+	}
+
+	if params.ConsGovView != curGovView.GovView+1 {
+		return utils.BYTE_FALSE, fmt.Errorf("ApplyForElect, too early or late to apply for elect for consensus gov view %d, current consensus gov view %d", params.ConsGovView, curGovView.GovView)
+	}
+
+	//ensure deposit
+	if peerPoolItem.Status != CandidateStatus && peerPoolItem.Status != ConsensusStatus {
+		return utils.BYTE_FALSE, fmt.Errorf("ApplyForElect, need be candidate before elect for consensus gov view %d", params.ConsGovView)
+	}
+
+	peerPoolMap.PeerPoolMap[params.PeerPubkey].ConsStatus |= ElectForConsensus
+	log.Debugf("ApplyForElect peer with pubkey %s will take part in elect for gov view %d", peerPoolItem.PeerPubkey, curGovView.GovView+1)
+
+	err = putPeerPoolMap(native, contract, view, peerPoolMap)
+	if err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("putPeerPoolMap error: %v", err)
+	}
+
+	return utils.BYTE_TRUE, nil
+}
+
+func QueryConsGovView(native *native.NativeService) ([]byte, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	curGovView, err := GetConsGovView(native, contract)
+	if err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("QueryConsGovView, get consensus goverance view error: %v", err)
+	}
+
+	buf := new(bytes.Buffer)
+	if err = curGovView.Serialize(buf); err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("QueryConsGovView consensus goverance view Serialize error:%v", err)
+	}
+	return buf.Bytes(), nil
 }

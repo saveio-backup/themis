@@ -51,6 +51,7 @@ const (
 	DBFT_MIN_NODE_NUM        = 4 //min node number of dbft consensus
 	SOLO_MIN_NODE_NUM        = 1 //min node number of solo consensus
 	VBFT_MIN_NODE_NUM        = 4 //min node number of vbft consensus
+	POC_MIN_NODE_NUM         = 1 //min node number of poc miner
 
 	CONSENSUS_TYPE_DBFT = "dbft"
 	CONSENSUS_TYPE_SOLO = "solo"
@@ -81,7 +82,7 @@ const (
 	DEFAULT_WASM_MAX_STEPCOUNT              = uint64(8000000)
 
 	DEFAULT_HTTP_MAX_CONN = 1024
-
+	DEFAULT_NUM_PEERS = 3
 	DEFAULT_DATA_DIR      = "./Chain/"
 	DEFAULT_RESERVED_FILE = "./peers.rsv"
 )
@@ -242,12 +243,12 @@ var PolarisConfig = &GenesisConfig{
 		C:                    2,
 		K:                    7,
 		L:                    112,
-		BlockMsgDelay:        10000,
-		HashMsgDelay:         10000,
+		BlockMsgDelay:        5000,
+		HashMsgDelay:         500,
 		PeerHandshakeTimeout: 10,
 		MaxBlockChangeView:   3000,
 		AdminOntID:           "did:ont:AMAx993nE6NEqZjwBssUfopxnnvTdob9ij",
-		MinInitStake:         10000,
+		MinInitStake:         10000000000000,
 		VrfValue:             "1c9810aa9822e511d5804a9c4db9dd08497c31087b0daafa34d768a3253441fa20515e2f30f81741102af0ca3cefc4818fef16adb825fbaa8cad78647f3afb590e",
 		VrfProof:             "c57741f934042cb8d8b087b44b161db56fc3ffd4ffb675d36cd09f83935be853d8729f3f5298d12d6fd28d45dde515a4b9d7f67682d182ba5118abf451ff1988",
 		Peers: []*VBFTPeerStakeInfo{
@@ -585,6 +586,7 @@ type CommonConfig struct {
 
 type ConsensusConfig struct {
 	EnableConsensus bool
+	EnablePoCMining bool
 	MaxTxInBlock    uint
 }
 
@@ -611,6 +613,10 @@ type P2PNodeConfig struct {
 	MaxConnInBound            uint
 	MaxConnOutBound           uint
 	MaxConnInBoundForSingleIP uint
+	NumPeer                   uint
+	EnableProxy               bool
+	ProxyServerList           string
+	ProxyServerIdList         string
 }
 
 type RpcConfig struct {
@@ -640,6 +646,15 @@ type WebSocketConfig struct {
 	HttpKeyPath  string
 }
 
+type PoCMiningConfig struct {
+	AccountId               uint64
+	PlotDir                 string
+	QueryMiningInfoInterval int
+	NumWorkTask             int
+	NoncesPerCache          uint64
+	TargetDeadline          uint64
+}
+
 type ThemisConfig struct {
 	Genesis   *GenesisConfig
 	Common    *CommonConfig
@@ -649,6 +664,7 @@ type ThemisConfig struct {
 	Restful   *RestfulConfig
 	GraphQL   *GraphQLConfig
 	Ws        *WebSocketConfig
+	PoC       *PoCMiningConfig
 }
 
 func NewThemisConfig() *ThemisConfig {
@@ -664,6 +680,7 @@ func NewThemisConfig() *ThemisConfig {
 		},
 		Consensus: &ConsensusConfig{
 			EnableConsensus: true,
+			EnablePoCMining: false,
 			MaxTxInBlock:    DEFAULT_MAX_TX_IN_BLOCK,
 		},
 		P2PNode: &P2PNodeConfig{
@@ -684,6 +701,7 @@ func NewThemisConfig() *ThemisConfig {
 			MaxConnInBound:            DEFAULT_MAX_CONN_IN_BOUND,
 			MaxConnOutBound:           DEFAULT_MAX_CONN_OUT_BOUND,
 			MaxConnInBoundForSingleIP: DEFAULT_MAX_CONN_IN_BOUND_FOR_SINGLE_IP,
+			NumPeer:                   DEFAULT_NUM_PEERS,
 		},
 		Rpc: &RpcConfig{
 			EnableHttpJsonRpc: true,
@@ -701,6 +719,11 @@ func NewThemisConfig() *ThemisConfig {
 		Ws: &WebSocketConfig{
 			EnableHttpWs: true,
 			HttpWsPort:   DEFAULT_WS_PORT,
+		},
+		PoC: &PoCMiningConfig{
+			QueryMiningInfoInterval: 15,
+			NumWorkTask:             2,
+			NoncesPerCache:          uint64(65536),
 		},
 	}
 }
