@@ -77,22 +77,6 @@ func (self *TxPoolActor) GetPoCParam(view uint32) *gov.SubmitNonceParam {
 	return param
 }
 
-type P2PActor struct {
-	P2P *actor.PID
-}
-
-func (self *P2PActor) Broadcast(msg interface{}) {
-	self.P2P.Tell(msg)
-}
-
-// TODO:FIXME
-// func (self *P2PActor) Transmit(target string, msg ptypes.Message) {
-// 	self.P2P.Tell(&netActor.TransmitConsensusMsgReq{
-// 		Target: target,
-// 		Msg:    msg,
-// 	})
-// }
-
 type LedgerActor struct {
 	Ledger *actor.PID
 }
