@@ -21,6 +21,7 @@ package governance
 import (
 	"fmt"
 	"io"
+	"sort"
 
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/serialization"
@@ -523,8 +524,17 @@ func (this *DefaultConsNodes) Serialize(w io.Writer) error {
 		return fmt.Errorf("serialization.WriteUint32, serialize ConsGroupItems length error: %v", err)
 	}
 
+	var nodes []string
+
 	for k, _ := range this.DefaultConsNodes {
-		if err := serialization.WriteString(w, k); err != nil {
+		nodes = append(nodes, k)
+	}
+	sort.SliceStable(nodes, func(i, j int) bool {
+		return nodes[i] > nodes[j]
+	})
+
+	for _, v := range nodes {
+		if err := serialization.WriteString(w, v); err != nil {
 			return fmt.Errorf("serialization.WriteString, serialize peerPubkey error: %v", err)
 		}
 	}

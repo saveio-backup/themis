@@ -234,7 +234,7 @@ func GetPeersConfigExt(memdb *overlaydb.MemDB) ([]*config.VBFTPeerStakeInfo, err
 	}
 	data, err := ledger.DefLedger.GetStorageItem(storageKey.ContractAddress, storageKey.Key)
 	if err != nil {
-		log.Debugf("GetPeersConfigExt fail to get peer pool for view %d", goveranceview.View)
+		log.Errorf("GetPeersConfigExt fail to get peer pool for view %d", goveranceview.View)
 		return nil, err
 	}
 	peerMap := &gov.PeerPoolMap{

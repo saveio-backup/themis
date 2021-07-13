@@ -549,9 +549,7 @@ func (this *GlobalParam) Deserialization(source *common.ZeroCopySource) error {
 	if err != nil {
 		return fmt.Errorf("utils.ReadVarUint, deserialize poc error: %v", err)
 	}
-	if minInitStake > math.MaxUint32 {
-		return fmt.Errorf("minInitStake larger than max of uint32")
-	}
+
 	if candidateNum > math.MaxUint32 {
 		return fmt.Errorf("candidateNum larger than max of uint32")
 	}

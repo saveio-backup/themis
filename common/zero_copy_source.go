@@ -31,6 +31,10 @@ type ZeroCopySource struct {
 	off uint64 // current reading index
 }
 
+func (self *ZeroCopySource) Source() []byte {
+	return self.s
+}
+
 // Len returns the number of bytes of the unread portion of the
 // slice.
 func (self *ZeroCopySource) Len() uint64 {
