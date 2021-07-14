@@ -24,6 +24,7 @@ import (
 	ct "github.com/saveio/themis/core/types"
 	msgCommon "github.com/saveio/themis/p2pserver/common"
 	mt "github.com/saveio/themis/p2pserver/message/types"
+	gov "github.com/saveio/themis/smartcontract/service/native/governance"
 )
 
 //Peer address package
@@ -172,4 +173,22 @@ func NewFindNodeReq(id msgCommon.PeerId) mt.Message {
 	}
 
 	return &req
+}
+
+//Peer address request package
+func NewSubmitNonce(param *gov.SubmitNonceParam) mt.Message {
+	log.Trace()
+	var msg mt.SubmitNonceParam
+	msg.View = param.View
+	msg.Address = param.Address[:]
+	msg.Id = param.Id
+	msg.Nonce = param.Nonce
+	msg.Deadline = param.Deadline
+	msg.PlotName = param.PlotName
+	msg.VoteConsPub = param.VoteConsPub
+	msg.VoteId = param.VoteId
+	msg.VoteInfo = param.VoteInfo
+	msg.MoveUpElect = param.MoveUpElect
+
+	return &msg
 }

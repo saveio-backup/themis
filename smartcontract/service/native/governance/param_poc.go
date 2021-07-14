@@ -25,6 +25,7 @@ import (
 	"io"
 
 	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/common/log"
 	"github.com/saveio/themis/common/serialization"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
@@ -90,7 +91,8 @@ func (this *SubmitNonceParam) Serialize(w io.Writer) error {
 	if err := utils.WriteVarUint(w, uint64(this.View)); err != nil {
 		return fmt.Errorf("utils.WriteVarUint, serialize View error: %v", err)
 	}
-	if err := serialization.WriteVarBytes(w, this.Address[:]); err != nil {
+	log.Infof("SplitBonus serialize address %v", this.Address)
+	if err := utils.WriteAddress(w, this.Address); err != nil {
 		return fmt.Errorf("serialization.WriteVarBytes, address address error: %v", err)
 	}
 	if err := utils.WriteVarUint(w, uint64(this.Id)); err != nil {
@@ -146,6 +148,7 @@ func (this *SubmitNonceParam) Deserialize(r io.Reader) error {
 	if err != nil {
 		return fmt.Errorf("utils.ReadAddress, deserialize address error: %v", err)
 	}
+	log.Infof("SplitBonus read address %v", address)
 	id, err := utils.ReadVarUint(r)
 	if err != nil {
 		return fmt.Errorf("utils.ReadVarUint, deserialize Id error: %v", err)

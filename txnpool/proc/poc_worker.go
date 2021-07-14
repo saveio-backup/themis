@@ -30,6 +30,7 @@ import (
 	"github.com/saveio/themis/core/types"
 	"github.com/saveio/themis/core/utils"
 	"github.com/saveio/themis/errors"
+	msgpack "github.com/saveio/themis/p2pserver/message/msg_pack"
 	gov "github.com/saveio/themis/smartcontract/service/native/governance"
 	tc "github.com/saveio/themis/txnpool/common"
 )
@@ -82,9 +83,8 @@ func (worker *pocPoolWorker) putPoCPool(pp *pendingParam) bool {
 	}
 
 	// notify p2p to gossip valid poc to peers!
-	pid := worker.server.GetPID(tc.NetActor)
-	if pid != nil && needBroadcast {
-		pid.Tell(pocEntry.Param)
+	if worker.server.Net != nil && needBroadcast {
+		go worker.server.Net.Broadcast(msgpack.NewSubmitNonce(pocEntry.Param))
 		log.Debugf("putPoCPool: try to send poc to p2p for gossip, hash %v",
 			pocEntry.Param.Hash())
 	}
@@ -208,6 +208,9 @@ func (worker *pocPoolWorker) verifyParam(pocReq *CheckPoCReq) {
 	if param.Deadline == deadline {
 		log.Debugf("verifyParam accept the nonce!")
 		p.ret = true
+	} else {
+		log.Debugf("verfiyParam failed deadline not match, expect %v but got %v, p.ret %v",
+			deadline, param.Deadline, p.ret)
 	}
 
 	worker.mu.Lock()

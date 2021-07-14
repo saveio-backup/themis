@@ -101,16 +101,19 @@ func (pp *PoCPool) GetPoCParam(view uint32) *gov.SubmitNonceParam {
 	defer pp.RUnlock()
 
 	if len(pp.pocList) == 0 {
+		log.Debugf("pocList is empty for view %v", view)
 		return nil
 	}
 
 	if len(pp.pocByView) == 0 {
+		log.Debugf("pocByView is empty for view %v", view)
 		return nil
 	}
 
 	if entry, ok := pp.pocByView[view]; ok {
 		return entry.Param
 	}
+	log.Debugf("poc param not found for view %v", view)
 
 	return nil
 }

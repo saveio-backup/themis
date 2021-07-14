@@ -20,6 +20,7 @@ package vbft
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"math"
 	"reflect"
@@ -2625,9 +2626,17 @@ func (self *Server) makePoCTx(check bool, h uint32) (*types.Transaction, *gover.
 		param = &gover.SubmitNonceParam{View: view}
 	}
 
+	buf := new(bytes.Buffer)
+	paramData, _ := json.Marshal(param)
+	log.Debugf("submit param json data %s\n", paramData)
+
+	if err := param.Serialize(buf); err != nil {
+		log.Errorf("serial submit nonce param err %v", err)
+	}
+
 	log.Debugf("winner %v, base58 %s", param, param.Address.ToBase58())
 
-	codes, _ := utils.BuildNativeInvokeCode(nutils.GovernanceContractAddress, 0, gover.SETTLE_VIEW, []interface{}{param})
+	codes, _ := utils.BuildNativeInvokeCode(nutils.GovernanceContractAddress, 0, gover.SETTLE_VIEW, []interface{}{buf.Bytes()})
 	mutable := utils.NewInvokeTransaction(codes)
 	mutable.GasLimit = math.MaxUint64
 
