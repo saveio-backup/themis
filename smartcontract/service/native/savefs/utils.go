@@ -77,6 +77,7 @@ const (
 	FS_CHECK_NODE_SECTOR_PROVED_INTIME = "FsCheckNodeSectorProvedInTime"
 	FS_GET_USER_UNSETTLED_FILES        = "FsGetUserUnsettledFiles"
 	FS_DELETE_UNSETTLED_FILES          = "FsDeleteUnsettledFiles"
+	FS_GET_POC_PROVELIST               = "FsGetPocProveList"
 )
 
 const (
@@ -96,6 +97,8 @@ const (
 	SAVEFS_SECTOR_FILE_INFO_GROUP     = "savefssectorfileinfogroup"
 	SAVEFS_SECTOR_FILE_INFO_GROUP_NUM = "savefsnumofsectorfileinfogroup"
 	SAVEFS_SECTOR_PUNISHMENT_HEIGHT   = "savefssectorpunishmentheight"
+	SAVEFS_MINER_PROVE_KEY            = "savefsminerpocprove"
+	SAVEFS_MINER_PROVE_LIST_KEY       = "savefsminerpocprovelist"
 )
 const (
 	FS_GAS_PRICE           = 1
@@ -338,6 +341,19 @@ func GenFsNodeSectorPunishmentKey(contract common.Address, nodeAddr common.Addre
 	key := append(contract[:], SAVEFS_SECTOR_PUNISHMENT_HEIGHT...)
 	key = append(key[:], nodeAddr[:]...)
 	key = append(key[:], util.Int64ToBytes(sectorID)...)
+	return key
+}
+
+func GenPocProveKey(contract common.Address, miner common.Address, height uint64) []byte {
+	key := append(contract[:], SAVEFS_MINER_PROVE_KEY...)
+	key = append(key[:], miner[:]...)
+	key = append(key[:], util.Int64ToBytes(height)...)
+	return key
+}
+
+func GenPocProveListKey(contract common.Address, height uint64) []byte {
+	key := append(contract[:], SAVEFS_MINER_PROVE_LIST_KEY...)
+	key = append(key[:], util.Int64ToBytes(height)...)
 	return key
 }
 

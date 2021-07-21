@@ -2,6 +2,8 @@ package savefs
 
 import (
 	"bytes"
+	"fmt"
+
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/log"
 	"github.com/saveio/themis/errors"
@@ -246,6 +248,22 @@ func FsSectorProve(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, errors.NewErr("[SectorProve] updateNextProveHeight error!")
 	}
 
+	if !sectorInfo.IsPlots {
+		return utils.BYTE_TRUE, nil
+	}
+
+	// TODO: verify this sector is real a sector with plots
+	// TODO: verify the size is plot file size
+	pocProve := getPocProve(native, sectorInfo.NodeAddr, native.Height)
+	if pocProve == nil {
+		pocProve = &PocProve{}
+	}
+	pocProve.Height = native.Height
+	pocProve.Miner = sectorInfo.NodeAddr
+	pocProve.PlotSize += sectorInfo.Used
+	if err := putPocProve(native, pocProve); err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("[SectorProve] putPocProve error! %s", err)
+	}
 	return utils.BYTE_TRUE, nil
 }
 

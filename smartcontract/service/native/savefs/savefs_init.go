@@ -73,6 +73,8 @@ func RegisterFsContract(native *native.NativeService) {
 
 	native.Register(FS_GET_USER_UNSETTLED_FILES, FsGetUnSettledFiles)
 	native.Register(FS_DELETE_UNSETTLED_FILES, FsDeleteUnsettledFiles)
+
+	native.Register(FS_GET_POC_PROVELIST, FsGetPocProveList)
 }
 
 func FsInit(native *native.NativeService) ([]byte, error) {

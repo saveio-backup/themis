@@ -2,12 +2,13 @@ package savefs
 
 import (
 	"fmt"
+	"io"
+
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/log"
 	"github.com/saveio/themis/errors"
 	"github.com/saveio/themis/smartcontract/service/native"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
-	"io"
 )
 
 const (
@@ -33,6 +34,7 @@ type SectorInfo struct {
 	TotalBlockNum    uint64   // total block num in the sector
 	FileNum          uint64   // total file num in sector
 	GroupNum         uint64   // sectorInfoGroup num
+	IsPlots          bool     // is plots sector
 	FileList         FileList // store the file in the order it is uploaded
 }
 
@@ -67,9 +69,13 @@ func (this *SectorInfo) Serialize(w io.Writer) error {
 	if err := utils.WriteVarUint(w, this.GroupNum); err != nil {
 		return fmt.Errorf("[SectorInfo] [GroupNum:%v] serialize from error:%v", this.GroupNum, err)
 	}
+	if err := utils.WriteBool(w, this.IsPlots); err != nil {
+		return fmt.Errorf("[SectorInfo] [IsPlots:%v] serialize from error:%v", this.FileList, err)
+	}
 	if err := this.FileList.Serialize(w); err != nil {
 		return fmt.Errorf("[SectorInfo] [FileList:%v] serialize from error:%v", this.FileList, err)
 	}
+
 	return nil
 }
 
@@ -105,9 +111,13 @@ func (this *SectorInfo) Deserialize(r io.Reader) error {
 	if this.GroupNum, err = utils.ReadVarUint(r); err != nil {
 		return fmt.Errorf("[SectorInfo] [GroupNum] Deserialize from error:%v", err)
 	}
+	if this.IsPlots, err = utils.ReadBool(r); err != nil {
+		return fmt.Errorf("[SectorInfo] [IsPlots] Deserialize from error:%v", err)
+	}
 	if err = this.FileList.Deserialize(r); err != nil {
 		return fmt.Errorf("[SectorInfo] [FileList] Deserialize from error:%v", err)
 	}
+
 	return nil
 }
 
@@ -122,6 +132,7 @@ func (this *SectorInfo) Serialization(sink *common.ZeroCopySink) {
 	utils.EncodeVarUint(sink, this.TotalBlockNum)
 	utils.EncodeVarUint(sink, this.FileNum)
 	utils.EncodeVarUint(sink, this.GroupNum)
+	utils.EncodeBool(sink, this.IsPlots)
 	this.FileList.Serialization(sink)
 }
 
@@ -164,6 +175,10 @@ func (this *SectorInfo) Deserialization(source *common.ZeroCopySource) error {
 		return err
 	}
 	this.GroupNum, err = utils.DecodeVarUint(source)
+	if err != nil {
+		return err
+	}
+	this.IsPlots, err = utils.DecodeBool(source)
 	if err != nil {
 		return err
 	}
