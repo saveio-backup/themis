@@ -2636,7 +2636,8 @@ func (self *Server) makePoCTx(check bool, h uint32) (*types.Transaction, *gover.
 
 	log.Debugf("winner %v, base58 %s", param, param.Address.ToBase58())
 
-	codes, _ := utils.BuildNativeInvokeCode(nutils.GovernanceContractAddress, 0, gover.SETTLE_VIEW, []interface{}{buf.Bytes()})
+	//codes, _ := utils.BuildNativeInvokeCode(nutils.GovernanceContractAddress, 0, gover.SETTLE_VIEW, []interface{}{buf.Bytes()})
+	codes, _ := utils.BuildNativeInvokeCode(nutils.GovernanceContractAddress, 0, gover.SETTLE_VIEW, []interface{}{param})
 	mutable := utils.NewInvokeTransaction(codes)
 	mutable.GasLimit = math.MaxUint64
 

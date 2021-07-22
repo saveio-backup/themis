@@ -471,18 +471,21 @@ func (this *PreConfig) Deserialization(source *common.ZeroCopySource) error {
 }
 
 type GlobalParam struct {
-	CandidateFee  uint64 //unit: 10^-9 ong
-	MinInitStake  uint64 //min init pos
-	CandidateNum  uint32 //num of candidate and consensus node
-	PosLimit      uint32 //authorize pos limit is initPos*posLimit
-	A             uint32 //fee split to all consensus node
-	B             uint32 //fee split to all candidate node
-	Yita          uint32 //split curve coefficient
-	Penalty       uint32 //authorize pos penalty percentage
-	ConsGroupSize uint32 //number of node in consensus group
-	Cons          uint32 //mining bonus split to all consensus node
-	Votes         uint32 //mining bonus split to all vote node
-	PoC           uint32 //mining bonus split to poc node
+	CandidateFee   uint64 //unit: 10^-9 ong
+	MinInitStake   uint64 //min init pos
+	CandidateNum   uint32 //num of candidate and consensus node
+	PosLimit       uint32 //authorize pos limit is initPos*posLimit
+	A              uint32 //fee split to all consensus node
+	B              uint32 //fee split to all candidate node
+	A2             uint32 //mining bonus split to all consensus node
+	B2             uint32 //mining bonus split to all candidate node
+	Yita           uint32 //split curve coefficient
+	Penalty        uint32 //authorize pos penalty percentage
+	ConsGroupSize  uint32 //number of node in consensus group
+	Cons           uint32 //mining bonus split to all consensus node
+	Votes          uint32 //mining bonus split to all vote node
+	PoC            uint32 //mining bonus split to poc node
+	FundWalletAddr string //fundation wallet address
 }
 
 func (this *GlobalParam) Serialization(sink *common.ZeroCopySink) {
@@ -492,12 +495,15 @@ func (this *GlobalParam) Serialization(sink *common.ZeroCopySink) {
 	utils.EncodeVarUint(sink, uint64(this.PosLimit))
 	utils.EncodeVarUint(sink, uint64(this.A))
 	utils.EncodeVarUint(sink, uint64(this.B))
+	utils.EncodeVarUint(sink, uint64(this.A2))
+	utils.EncodeVarUint(sink, uint64(this.B2))
 	utils.EncodeVarUint(sink, uint64(this.Yita))
 	utils.EncodeVarUint(sink, uint64(this.Penalty))
 	utils.EncodeVarUint(sink, uint64(this.ConsGroupSize))
 	utils.EncodeVarUint(sink, uint64(this.Cons))
 	utils.EncodeVarUint(sink, uint64(this.Votes))
 	utils.EncodeVarUint(sink, uint64(this.PoC))
+	sink.WriteString(this.FundWalletAddr)
 }
 
 func (this *GlobalParam) Deserialization(source *common.ZeroCopySource) error {
@@ -525,6 +531,14 @@ func (this *GlobalParam) Deserialization(source *common.ZeroCopySource) error {
 	if err != nil {
 		return fmt.Errorf("utils.ReadVarUint, deserialize b error: %v", err)
 	}
+	a2, err := utils.DecodeVarUint(source)
+	if err != nil {
+		return fmt.Errorf("utils.ReadVarUint, deserialize a error: %v", err)
+	}
+	b2, err := utils.DecodeVarUint(source)
+	if err != nil {
+		return fmt.Errorf("utils.ReadVarUint, deserialize b error: %v", err)
+	}
 	yita, err := utils.DecodeVarUint(source)
 	if err != nil {
 		return fmt.Errorf("utils.ReadVarUint, deserialize yita error: %v", err)
@@ -548,6 +562,10 @@ func (this *GlobalParam) Deserialization(source *common.ZeroCopySource) error {
 	poc, err := utils.DecodeVarUint(source)
 	if err != nil {
 		return fmt.Errorf("utils.ReadVarUint, deserialize poc error: %v", err)
+	}
+	fundWalletAddr, err := utils.DecodeString(source)
+	if err != nil {
+		return fmt.Errorf("utils.DecodeString, deserialize fundWalletAddr error: %v", err)
 	}
 
 	if candidateNum > math.MaxUint32 {
@@ -577,12 +595,15 @@ func (this *GlobalParam) Deserialization(source *common.ZeroCopySource) error {
 	this.PosLimit = uint32(posLimit)
 	this.A = uint32(a)
 	this.B = uint32(b)
+	this.A2 = uint32(a2)
+	this.B2 = uint32(b2)
 	this.Yita = uint32(yita)
 	this.Penalty = uint32(penalty)
 	this.ConsGroupSize = uint32(consGroupSize)
 	this.Cons = uint32(cons)
 	this.Votes = uint32(votes)
 	this.PoC = uint32(poc)
+	this.FundWalletAddr = fundWalletAddr
 	return nil
 }
 

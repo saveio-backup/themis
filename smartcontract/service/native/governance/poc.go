@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"sort"
 
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/log"
@@ -70,6 +71,12 @@ const (
 	NUM_VIEW_COLD_DOWN              = 36
 
 	NUM_NODE_PER_CONS_ELECT_PERIOD = 3
+
+	NUM_VIEW_PER_YEAR = 52560
+	NUM_VIEW_PER_DAY  = 144
+	NUM_DAY_DELAYED   = 90
+
+	DELAYED_PERCENT = 70
 
 	FS_PLOT_EXPECTED_PERCENT = 10
 )
@@ -295,6 +302,12 @@ func UpdateTarget(native *native.NativeService, submitInfo *SubmitNonceParam) ([
 		return utils.BYTE_FALSE, fmt.Errorf("UpdateTarget, updatePeriod error: %v", err)
 	}
 
+	// transfer delayed bonus
+	err = transferDelayedBonus(native, view)
+	if err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("UpdateTarget, transferDelayedBonus error: %v", err)
+	}
+
 	return utils.BYTE_TRUE, nil
 }
 
@@ -320,35 +333,243 @@ func handleDeadline(native *native.NativeService, param *SubmitNonceParam, winne
 }
 
 //Go to next PoC mining view. Adjust target etc
-func SplitBonus(native *native.NativeService, winner common.Address, bonus uint64) error {
+func SplitBonus(native *native.NativeService, winner common.Address, view uint32, bonus uint64, delayed bool) error {
 	contract := native.ContextRef.CurrentContext().ContractAddress
 
-	percent, err := checkPeriodsInfo(native, winner)
-	if err != nil {
-		return fmt.Errorf("SettleView, checkPeriodsInfo %s", err)
-	}
+	//percent, err := checkPeriodsInfo(native, winner)
+	//if err != nil {
+	//	return fmt.Errorf("SettleView, checkPeriodsInfo %s", err)
+	//}
 
 	// transfer bonus based on globalParam
 	globalParam, err := getGlobalParam(native, contract)
 	if err != nil {
 		return fmt.Errorf("SplitBonus, getGlobalParam error: %v", err)
 	}
-	consBonus := bonus * uint64(globalParam.Cons) / 100
+
 	votesBonus := bonus * uint64(globalParam.Votes) / 100
-	pocBonus := bonus * uint64(globalParam.PoC) * uint64(percent) / 100 / 100
-	// if miner don't have enough plot file, left bonus belong to consensus nodes
-	consBonus += bonus*uint64(globalParam.PoC)/100 - pocBonus
 
-	increaseGasRevenue(native, contract, consBonus)
+	//calculate fundBonus and pocBonus
+	year := (view - 1) / NUM_VIEW_PER_YEAR
+	pocPercent := 80 + year*5
+	if pocPercent >= 100 {
+		pocPercent = 95
+	}
+	fundPercent := 100 - pocPercent
+
+	//split bonus to fundation
+	fundBonus := bonus * uint64(fundPercent) / 100
+	realFundBonus := GetEffectBonus(fundBonus, delayed)
+	if delayed {
+		total := GetTotalDelayedBonus(fundBonus)
+		log.Debugf("SplitBonus send delayed %d(10^-9) of total %d(10^-9) of view %d to fundation", realFundBonus, total, view)
+	} else {
+		log.Debugf("SplitBonus send non-delay %d(10^-9) of total %d(10^-9) of view %d to fundation", realFundBonus, fundBonus, view)
+	}
+	SplitBonusToFundation(native, contract, realFundBonus, delayed)
+
+	//split bonus to miner
+	pocBonus := bonus * uint64(pocPercent) / 100
+	winnerBonus := pocBonus * uint64(globalParam.PoC) / 100
+	realWinnerBonus := GetEffectBonus(winnerBonus, delayed)
+	if delayed {
+		total := GetTotalDelayedBonus(winnerBonus)
+		log.Debugf("SplitBonus send delayed %d(10^-9) of total %d(10^-9) of view %d to miner", realWinnerBonus, total, view)
+	} else {
+		log.Debugf("SplitBonus send non-delay %d(10^-9) of total %d(10^-9) of view %d to miner", realWinnerBonus, winnerBonus, view)
+	}
+	SplitBonusToMiner(native, winner, realWinnerBonus, delayed)
+
+	//split bonus to cons nodes
+	consBonus := pocBonus * uint64(globalParam.Cons) / 100
+	realConsBonus := GetEffectBonus(consBonus, delayed)
+	if delayed {
+		total := GetTotalDelayedBonus(consBonus)
+		log.Debugf("SplitBonus send delayed %d(10^-9) of total %d(10^-9) of view %d to cons nodes", realConsBonus, total, view)
+	} else {
+		log.Debugf("SplitBonus send non-delay %d(10^-9) of total %d(10^-9) of view %d to cons nodes", realConsBonus, consBonus, view)
+	}
+	SplitBonusToConsensusNodes(native, contract, view, realConsBonus, delayed)
+
 	//sip and cons vote share vote bonus
-	increaseSipVoteRevenue(native, contract, votesBonus/2)
-	increaseConsVoteRevenue(native, contract, votesBonus/2)
-	log.Debugf("SplitBonus  %d(10^-9) for consensus, %d(10^-9) for votes", consBonus, votesBonus)
-	log.Debugf("SplitBonus send %d(10^-9) bonus for miner: %s", pocBonus, winner.ToBase58())
+	if !delayed {
+		increaseSipVoteRevenue(native, contract, votesBonus/2)
+		increaseConsVoteRevenue(native, contract, votesBonus/2)
+		log.Debugf("SplitBonus  %d(10^-9) for consensus, %d(10^-9) for votes", consBonus, votesBonus)
+	}
 
-	err = appCallTransferOnt(native, utils.GovernanceContractAddress, winner, uint64(pocBonus))
+	return nil
+}
+
+func GetTotalDelayedBonus(total uint64) uint64 {
+	return total * DELAYED_PERCENT / 100
+}
+
+func GetEffectBonus(total uint64, delayed bool) uint64 {
+	if delayed {
+		total = GetTotalDelayedBonus(total)
+		total /= NUM_DAY_DELAYED
+	} else {
+		total = total * (100 - DELAYED_PERCENT) / 100
+	}
+	return total
+}
+
+//[TODO] split bonus to multiple miners based pdp rate,need call FS contract
+func SplitBonusToMiner(native *native.NativeService, winner common.Address, bonus uint64, delayed bool) error {
+	pocBonus := bonus
+
+	if delayed {
+		log.Debugf("SplitBonusToMiner send delayed %d(10^-9) for miner:%s", pocBonus, winner.ToBase58())
+	} else {
+		log.Debugf("SplitBonusToMiner send non-delay %d(10^-9) for miner:%s", pocBonus, winner.ToBase58())
+	}
+
+	err := appCallTransferOnt(native, utils.GovernanceContractAddress, winner, uint64(pocBonus))
 	if err != nil {
-		return fmt.Errorf("SplitBonus, bonus transfer error: %v", err)
+		return fmt.Errorf("SplitBonusToMiner, bonus transfer error: %v", err)
+	}
+
+	return nil
+}
+
+func SplitBonusToFundation(native *native.NativeService, contract common.Address, bonus uint64, delayed bool) error {
+	// transfer bonus based on globalParam
+	globalParam, err := getGlobalParam(native, contract)
+	if err != nil {
+		return fmt.Errorf("SplitBonusToFundation, getGlobalParam error: %v", err)
+	}
+
+	fundAddr, err := common.AddressFromBase58(globalParam.FundWalletAddr)
+
+	if delayed {
+		log.Debugf("SplitBonusToFundation send delayed %d(10^-9) for fundation:%s", bonus, globalParam.FundWalletAddr)
+	} else {
+		log.Debugf("SplitBonusToFundation send non-delay %d(10^-9) for fundation:%s", bonus, globalParam.FundWalletAddr)
+	}
+	err = appCallTransferOnt(native, utils.GovernanceContractAddress, fundAddr, uint64(bonus))
+	if err != nil {
+		return fmt.Errorf("SplitBonusToFundation, bonus transfer error: %v", err)
+	}
+	return nil
+}
+
+func SplitBonusToConsensusNodes(native *native.NativeService, contract common.Address, view uint32, bonus uint64, delayed bool) error {
+	// get config
+	config, err := getConfig(native, contract)
+	if err != nil {
+		return fmt.Errorf("getConfig, get config error: %v", err)
+	}
+
+	//get peerPoolMap
+	peerPoolMap, err := GetPeerPoolMap(native, contract, view-1)
+	if err != nil {
+		return fmt.Errorf("SplitBonusToConsensusNodes, get peerPoolMap error: %v", err)
+	}
+
+	//get globalParam
+	globalParam, err := getGlobalParam(native, contract)
+	if err != nil {
+		return fmt.Errorf("getGlobalParam, getGlobalParam error: %v", err)
+	}
+	balance := bonus
+
+	peersCandidate := []*CandidateSplitInfo{}
+
+	for _, peerPoolItem := range peerPoolMap.PeerPoolMap {
+		if peerPoolItem.Status == CandidateStatus || peerPoolItem.Status == ConsensusStatus {
+			stake := peerPoolItem.TotalPos + peerPoolItem.InitPos
+			peersCandidate = append(peersCandidate, &CandidateSplitInfo{
+				PeerPubkey: peerPoolItem.PeerPubkey,
+				InitPos:    peerPoolItem.InitPos,
+				Address:    peerPoolItem.Address,
+				Stake:      stake,
+			})
+		}
+	}
+
+	// sort peers by stake
+	sort.SliceStable(peersCandidate, func(i, j int) bool {
+		if peersCandidate[i].Stake > peersCandidate[j].Stake {
+			return true
+		} else if peersCandidate[i].Stake == peersCandidate[j].Stake {
+			return peersCandidate[i].PeerPubkey > peersCandidate[j].PeerPubkey
+		}
+		return false
+	})
+
+	// cal s of each consensus node
+	var sum uint64
+	for i := 0; i < int(config.K); i++ {
+		sum += peersCandidate[i].Stake
+	}
+	// if sum = 0, means consensus peer in config, do not split
+	if sum < uint64(config.K) {
+		//use same share for peer in config
+		sum = uint64(config.K)
+	}
+
+	avg := sum / uint64(config.K)
+	var sumS uint64
+	for i := 0; i < int(config.K); i++ {
+		//use same share when sum is 0
+		if sum == 0 {
+			peersCandidate[i].S, err = splitCurve(native, contract, 1, avg, uint64(globalParam.Yita))
+			if err != nil {
+				return fmt.Errorf("splitCurve, calculate splitCurve error: %v", err)
+			}
+		} else {
+			peersCandidate[i].S, err = splitCurve(native, contract, peersCandidate[i].Stake, avg, uint64(globalParam.Yita))
+			if err != nil {
+				return fmt.Errorf("splitCurve, calculate splitCurve error: %v", err)
+			}
+		}
+		sumS += peersCandidate[i].S
+	}
+	if sumS == 0 {
+		return fmt.Errorf("SplitBonusToConsensusNodes, sumS is 0")
+	}
+
+	//fee split of consensus peer
+	for i := 0; i < int(config.K); i++ {
+		nodeAmount := balance * uint64(globalParam.A2) / 100 * peersCandidate[i].S / sumS
+		address := peersCandidate[i].Address
+
+		if delayed {
+			log.Debugf("SplitBonusToConsensusNodes send delayed %d(10^-9) bonus for cons node:%s", nodeAmount, address.ToBase58())
+		} else {
+			log.Debugf("SplitBonusToConsensusNodes send non-delay %d(10^-9) bonus for cons node:%s", nodeAmount, address.ToBase58())
+		}
+
+		err = appCallTransferOnt(native, utils.GovernanceContractAddress, address, nodeAmount)
+		if err != nil {
+			return fmt.Errorf("SplitBonusToConsensusNodes, bonus transfer error: %v", err)
+		}
+	}
+
+	//fee split of candidate peer
+	// cal s of each candidate node
+	sum = 0
+	for i := int(config.K); i < len(peersCandidate); i++ {
+		sum += peersCandidate[i].Stake
+	}
+	if sum == 0 {
+		return nil
+	}
+	for i := int(config.K); i < len(peersCandidate); i++ {
+		nodeAmount := balance * uint64(globalParam.B2) / 100 * peersCandidate[i].Stake / sum
+		address := peersCandidate[i].Address
+
+		if delayed {
+			log.Debugf("SplitBonusToConsensusNodes send delayed %d(10^-9) bonus for cons node:%s", nodeAmount, address.ToBase58())
+		} else {
+			log.Debugf("SplitBonusToConsensusNodes send non-delay %d(10^-9) bonus for cons node:%s", nodeAmount, address.ToBase58())
+		}
+
+		err = appCallTransferOnt(native, utils.GovernanceContractAddress, address, nodeAmount)
+		if err != nil {
+			return fmt.Errorf("SplitBonusToConsensusNodes, bonus transfer error: %v", err)
+		}
 	}
 
 	return nil
@@ -408,7 +629,7 @@ func SettleView(native *native.NativeService) ([]byte, error) {
 
 	// send bonus to miner
 	bonus := GetBlockSubsidy(miningView.View)
-	err = SplitBonus(native, submitInfo.Address, bonus)
+	err = SplitBonus(native, submitInfo.Address, submitInfo.View, bonus, false)
 	if err != nil {
 		return utils.BYTE_FALSE, fmt.Errorf("SettleView, SplitBonus fail %s", err)
 	}

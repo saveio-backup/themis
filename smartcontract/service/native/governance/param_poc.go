@@ -91,7 +91,7 @@ func (this *SubmitNonceParam) Serialize(w io.Writer) error {
 	if err := utils.WriteVarUint(w, uint64(this.View)); err != nil {
 		return fmt.Errorf("utils.WriteVarUint, serialize View error: %v", err)
 	}
-	log.Infof("SplitBonus serialize address %v", this.Address)
+
 	if err := utils.WriteAddress(w, this.Address); err != nil {
 		return fmt.Errorf("serialization.WriteVarBytes, address address error: %v", err)
 	}

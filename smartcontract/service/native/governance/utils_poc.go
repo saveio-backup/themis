@@ -340,6 +340,10 @@ func queryVolume(native *native.NativeService, miner common.Address) (uint64, er
 
 }
 
+func IsLastViewOfDay(view uint32) bool {
+	return view%NUM_VIEW_PER_DAY == 0
+}
+
 func GetMiningPeriod(view uint32) uint32 {
 	return (view + NUM_VIEW_PER_PERIOD - 1) / NUM_VIEW_PER_PERIOD
 }
@@ -429,6 +433,40 @@ func updatePeriod(native *native.NativeService, view uint32) error {
 	}
 	if err := iter.Error(); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func transferDelayedBonus(native *native.NativeService, view uint32) error {
+	if !IsLastViewOfDay(view) {
+		return nil
+	}
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	//go through winner of last 90 days!
+	first := int64(view) - NUM_VIEW_PER_DAY*(NUM_DAY_DELAYED+1)
+	if first <= 0 {
+		first = 1
+	}
+	last := int64(view) - NUM_VIEW_PER_DAY
+	if last <= 0 {
+		return nil
+	}
+
+	for curView := uint32(first); curView <= uint32(last); curView++ {
+		winnerInfo, err := getWinnerInfo(native, contract, curView)
+		if err != nil {
+			return fmt.Errorf("transferDelayedBonus, get winnerInfo for view %d error: %v", view, err)
+		}
+
+		// send delayed bonus to miner
+		bonus := GetBlockSubsidy(curView)
+		err = SplitBonus(native, winnerInfo.Address, curView, bonus, true)
+		if err != nil {
+			return fmt.Errorf("transferDelayedBonus, SplitBonus fail %s", err)
+		}
+
 	}
 
 	return nil

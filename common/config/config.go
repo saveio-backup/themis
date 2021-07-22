@@ -82,7 +82,7 @@ const (
 	DEFAULT_WASM_MAX_STEPCOUNT              = uint64(8000000)
 
 	DEFAULT_HTTP_MAX_CONN = 1024
-	DEFAULT_NUM_PEERS = 3
+	DEFAULT_NUM_PEERS     = 3
 	DEFAULT_DATA_DIR      = "./Chain/"
 	DEFAULT_RESERVED_FILE = "./peers.rsv"
 )
@@ -400,6 +400,7 @@ type VBFTConfig struct {
 	VrfValue             string               `json:"vrf_value"`
 	VrfProof             string               `json:"vrf_proof"`
 	Peers                []*VBFTPeerStakeInfo `json:"peers"`
+	FundWalletAddr       string               `json:"fund_wallet_addr"`
 }
 
 func (self *VBFTConfig) Serialization(sink *common.ZeroCopySink) error {
@@ -421,6 +422,7 @@ func (self *VBFTConfig) Serialization(sink *common.ZeroCopySink) error {
 			return err
 		}
 	}
+	sink.WriteString(self.FundWalletAddr)
 
 	return nil
 }
@@ -499,6 +501,8 @@ func (this *VBFTConfig) Deserialization(source *common.ZeroCopySource) error {
 		}
 		peers = append(peers, peer)
 	}
+	fundWalletAddr, _, irregular, eof := source.NextString()
+
 	this.N = n
 	this.C = c
 	this.K = k
@@ -512,6 +516,7 @@ func (this *VBFTConfig) Deserialization(source *common.ZeroCopySource) error {
 	this.VrfValue = vrfValue
 	this.VrfProof = vrfProof
 	this.Peers = peers
+	this.FundWalletAddr = fundWalletAddr
 	return nil
 }
 

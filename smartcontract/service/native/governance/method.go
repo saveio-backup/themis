@@ -1408,9 +1408,11 @@ func executeCommitDposEnhance(native *native.NativeService, contract common.Addr
 	if err != nil {
 		return fmt.Errorf("putPeerPoolMap, put peerPoolMap error: %v", err)
 	}
-	oldView := view - 1
-	oldViewBytes := GetUint32Bytes(oldView)
-	native.CacheDB.Delete(utils.ConcatKey(contract, []byte(PEER_POOL), oldViewBytes))
+
+	//need keep old map for dispatch delayed mining bonus
+	//oldView := view - 1
+	//oldViewBytes := GetUint32Bytes(oldView)
+	//native.CacheDB.Delete(utils.ConcatKey(contract, []byte(PEER_POOL), oldViewBytes))
 
 	return nil
 }

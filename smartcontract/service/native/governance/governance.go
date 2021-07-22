@@ -213,18 +213,21 @@ func InitConfig(native *native.NativeService) ([]byte, error) {
 
 	//init globalParam
 	globalParam := &GlobalParam{
-		CandidateFee:  500000000000,
-		MinInitStake:  configuration.MinInitStake,
-		CandidateNum:  7 * 7,
-		PosLimit:      20,
-		A:             50,
-		B:             50,
-		Yita:          5,
-		Penalty:       5,
-		ConsGroupSize: configuration.K,
-		Cons:          10,
-		Votes:         5,
-		PoC:           85,
+		CandidateFee:   500000000000,
+		MinInitStake:   configuration.MinInitStake,
+		CandidateNum:   7 * 7,
+		PosLimit:       20,
+		A:              50,
+		B:              50,
+		A2:             30,
+		B2:             70,
+		Yita:           5,
+		Penalty:        5,
+		ConsGroupSize:  configuration.K,
+		Cons:           15,
+		Votes:          0,
+		PoC:            85,
+		FundWalletAddr: configuration.FundWalletAddr,
 	}
 	err = putGlobalParam(native, contract, globalParam)
 	if err != nil {
