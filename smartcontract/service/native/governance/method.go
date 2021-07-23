@@ -666,12 +666,14 @@ func executeCommitDpos(native *native.NativeService, contract common.Address) er
 	view := governanceView.View
 
 	if view <= NEW_VERSION_VIEW {
-		err = executeCommitDpos1(native, contract)
+		//err = executeCommitDpos1(native, contract)
+		err = executeCommitDposEnhance(native, contract)
 		if err != nil {
 			return fmt.Errorf("executeCommitDpos1 error: %v", err)
 		}
 	} else {
-		err = executeCommitDpos2(native, contract)
+		//err = executeCommitDpos2(native, contract)
+		err = executeCommitDposEnhance(native, contract)
 		if err != nil {
 			return fmt.Errorf("executeCommitDpos2 error: %v", err)
 		}
@@ -781,9 +783,45 @@ func executeSplitEnhance(native *native.NativeService, contract common.Address, 
 		sum = uint64(config.K)
 	}
 
-	//[PoC] just use deposit without Curve
+	/*
+		//[PoC] just use deposit without Curve
+		for i := 0; i < int(config.K); i++ {
+			nodeAmount := balance * uint64(globalParam.A) / 100 * peersCandidate[i].Stake / sum
+			address := peersCandidate[i].Address
+			log.Debugf("executeSplitEnhance send %d bonus to consensus node: %s", nodeAmount, address.ToBase58())
+
+			err = appCallTransferRevenue(native, utils.GovernanceContractAddress, address, nodeAmount)
+			if err != nil {
+				return fmt.Errorf("executeSplitEnhance, bonus transfer error: %v", err)
+			}
+		}
+	*/
+
+	//[PoC] use deposit and Curve
+	avg := sum / uint64(config.K)
+	var sumS uint64
 	for i := 0; i < int(config.K); i++ {
-		nodeAmount := balance * uint64(globalParam.A) / 100 * peersCandidate[i].Stake / sum
+		//use same share when sum is 0
+		if sum == 0 {
+			peersCandidate[i].S, err = splitCurve(native, contract, 1, avg, uint64(globalParam.Yita))
+			if err != nil {
+				return fmt.Errorf("splitCurve, calculate splitCurve error: %v", err)
+			}
+		} else {
+			peersCandidate[i].S, err = splitCurve(native, contract, peersCandidate[i].Stake, avg, uint64(globalParam.Yita))
+			if err != nil {
+				return fmt.Errorf("splitCurve, calculate splitCurve error: %v", err)
+			}
+		}
+		sumS += peersCandidate[i].S
+	}
+	if sumS == 0 {
+		return fmt.Errorf("executeSplitEnhance, sumS is 0")
+	}
+
+	//fee split of consensus peer
+	for i := 0; i < int(config.K); i++ {
+		nodeAmount := balance * uint64(globalParam.A) / 100 * peersCandidate[i].S / sumS
 		address := peersCandidate[i].Address
 
 		log.Debugf("executeSplitEnhance send %d bonus to consensus node: %s", nodeAmount, address.ToBase58())

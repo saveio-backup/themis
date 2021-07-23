@@ -445,7 +445,7 @@ func transferDelayedBonus(native *native.NativeService, view uint32) error {
 	contract := native.ContextRef.CurrentContext().ContractAddress
 
 	//go through winner of last 90 days!
-	first := int64(view) - NUM_VIEW_PER_DAY*(NUM_DAY_DELAYED+1)
+	first := int64(view) - NUM_VIEW_PER_DAY*(NUM_DAY_DELAYED+1) + 1
 	if first <= 0 {
 		first = 1
 	}
@@ -461,7 +461,8 @@ func transferDelayedBonus(native *native.NativeService, view uint32) error {
 		}
 
 		// send delayed bonus to miner
-		bonus := GetBlockSubsidy(curView)
+		log.Debugf("transferDelayedBonus send delayed bonus of view: %d", curView)
+		bonus := GetBlockSubsidy(curView - 1)
 		err = SplitBonus(native, winnerInfo.Address, curView, bonus, true)
 		if err != nil {
 			return fmt.Errorf("transferDelayedBonus, SplitBonus fail %s", err)
