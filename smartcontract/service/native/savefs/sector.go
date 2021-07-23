@@ -70,7 +70,7 @@ func FsCreateSector(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, errors.NewErr("[CreateSector] setSectorInfo error!")
 	}
 
-	CreateSectorEvent(native, info.NodeAddr, info.SectorID, info.ProveLevel, info.Size)
+	CreateSectorEvent(native, info.NodeAddr, info.SectorID, info.ProveLevel, info.Size, info.IsPlots)
 	return utils.BYTE_TRUE, nil
 }
 

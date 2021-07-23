@@ -113,7 +113,8 @@ func FilePDPSuccessEvent(native *native.NativeService, fileHash []byte, walletAd
 	newEvent(native, EVENT_FS_FILE_PDP_SUCCESS, []common.Address{walletAddr}, event)
 }
 
-func CreateSectorEvent(native *native.NativeService, walletAddr common.Address, sectorId uint64, proveLevel uint64, size uint64) {
+func CreateSectorEvent(native *native.NativeService, walletAddr common.Address,
+	sectorId uint64, proveLevel uint64, size uint64, isPlots bool) {
 	event := map[string]interface{}{
 		"eventId":     EVENT_FS_CREATE_SECTOR,
 		"blockHeight": native.Height,
@@ -122,6 +123,7 @@ func CreateSectorEvent(native *native.NativeService, walletAddr common.Address, 
 		"sectorId":    sectorId,
 		"proveLevel":  proveLevel,
 		"size":        size,
+		"isPlots":     isPlots,
 	}
 	newEvent(native, EVENT_FS_CREATE_SECTOR, []common.Address{walletAddr}, event)
 }
