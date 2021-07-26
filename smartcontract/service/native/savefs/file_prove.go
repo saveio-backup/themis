@@ -26,16 +26,12 @@ import (
 )
 
 type FileProve struct {
-	FileHash     []byte
-	ProveData    []byte
-	BlockHeight  uint64
-	NodeWallet   common.Address
-	Profit       uint64
-	LuckyNum     uint64
-	BakHeight    uint64
-	BakNum       uint64
-	BrokenWallet common.Address
-	SectorID     uint64
+	FileHash    []byte
+	ProveData   []byte
+	BlockHeight uint64
+	NodeWallet  common.Address
+	Profit      uint64
+	SectorID    uint64
 }
 
 func (this *FileProve) Serialize(w io.Writer) error {
@@ -53,18 +49,6 @@ func (this *FileProve) Serialize(w io.Writer) error {
 	}
 	if err := utils.WriteVarUint(w, this.Profit); err != nil {
 		return fmt.Errorf("[FileProve] [this.Profit:%v] serialize from error:%v", this.Profit, err)
-	}
-	if err := utils.WriteVarUint(w, this.LuckyNum); err != nil {
-		return fmt.Errorf("[FileProve] [this.LuckyNum:%v] serialize from error:%v", this.LuckyNum, err)
-	}
-	if err := utils.WriteVarUint(w, this.BakHeight); err != nil {
-		return fmt.Errorf("[FileProve] [this.BakHeight:%v] serialize from error:%v", this.BakHeight, err)
-	}
-	if err := utils.WriteVarUint(w, this.BakNum); err != nil {
-		return fmt.Errorf("[FileProve] [this.BakNum:%v] serialize from error:%v", this.BakNum, err)
-	}
-	if err := utils.WriteAddress(w, this.BrokenWallet); err != nil {
-		return fmt.Errorf("[FileProve] [this.BrokenWallet:%v] serialize from error:%v", this.BrokenWallet, err)
 	}
 	if err := utils.WriteVarUint(w, this.SectorID); err != nil {
 		return fmt.Errorf("[FileProve] [this.SectorID:%v] serialize from error:%v", this.SectorID, err)
@@ -89,18 +73,6 @@ func (this *FileProve) Deserialize(r io.Reader) error {
 	if this.Profit, err = utils.ReadVarUint(r); err != nil {
 		return fmt.Errorf("[FileProve] [Profit] deserialize from error:%v", err)
 	}
-	if this.LuckyNum, err = utils.ReadVarUint(r); err != nil {
-		return fmt.Errorf("[FileProve] [LuckyNum] deserialize from error:%v", err)
-	}
-	if this.BakHeight, err = utils.ReadVarUint(r); err != nil {
-		return fmt.Errorf("[FileProve] [BakHeight] deserialize from error:%v", err)
-	}
-	if this.BakNum, err = utils.ReadVarUint(r); err != nil {
-		return fmt.Errorf("[FileProve] [BakNum] deserialize from error:%v", err)
-	}
-	if this.BrokenWallet, err = utils.ReadAddress(r); err != nil {
-		return fmt.Errorf("[FileProve] [BrokenWallet] deserialize from error:%v", err)
-	}
 	if this.SectorID, err = utils.ReadVarUint(r); err != nil {
 		return fmt.Errorf("[FileProve] [SectorID] deserialize from error:%v", err)
 	}
@@ -113,10 +85,6 @@ func (this *FileProve) Serialization(sink *common.ZeroCopySink) {
 	utils.EncodeVarUint(sink, this.BlockHeight)
 	utils.EncodeAddress(sink, this.NodeWallet)
 	utils.EncodeVarUint(sink, this.Profit)
-	utils.EncodeVarUint(sink, this.LuckyNum)
-	utils.EncodeVarUint(sink, this.BakHeight)
-	utils.EncodeVarUint(sink, this.BakNum)
-	utils.EncodeAddress(sink, this.BrokenWallet)
 	utils.EncodeVarUint(sink, this.SectorID)
 }
 
@@ -139,22 +107,6 @@ func (this *FileProve) Deserialization(source *common.ZeroCopySource) error {
 		return err
 	}
 	this.Profit, err = utils.DecodeVarUint(source)
-	if err != nil {
-		return err
-	}
-	this.LuckyNum, err = utils.DecodeVarUint(source)
-	if err != nil {
-		return err
-	}
-	this.BakHeight, err = utils.DecodeVarUint(source)
-	if err != nil {
-		return err
-	}
-	this.BakNum, err = utils.DecodeVarUint(source)
-	if err != nil {
-		return err
-	}
-	this.BrokenWallet, err = utils.DecodeAddress(source)
 	if err != nil {
 		return err
 	}
