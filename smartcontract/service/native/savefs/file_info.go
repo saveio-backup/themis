@@ -1,4 +1,5 @@
 /*
+IsPlotFile
  * Copyright (C) 2019 The themis Authors
  * This file is part of The themis library.
  *
@@ -14,7 +15,7 @@
  *
  * You should have received a copy of the GNU Lesser General Public License
  * along with The themis.  If not, see <http://www.gnu.org/licenses/>.
- */
+*/
 package savefs
 
 import (
@@ -63,6 +64,8 @@ type FileInfo struct {
 	BlocksRoot     []byte
 	ProveLevel     uint64      // prove level will decide the proveInterval when set
 	SectorRefs     []SectorRef // store sectors that has reference to this file
+	IsPlotFile     bool
+	PlotInfo       *PlotInfo
 }
 
 func (this *FileInfo) Serialize(w io.Writer) error {
@@ -139,6 +142,18 @@ func (this *FileInfo) Serialize(w io.Writer) error {
 		}
 		if err := utils.WriteVarUint(w, ref.SectorID); err != nil {
 			return fmt.Errorf("[FileInfo] [SectorRefs SectorID:%v] serialize from error:%v", this.RealFileSize, err)
+		}
+	}
+	if err := utils.WriteBool(w, this.IsPlotFile); err != nil {
+		return fmt.Errorf("[FileInfo] [IsPlotFile:%v] serialize from error:%v", this.IsPlotFile, err)
+	}
+
+	if this.IsPlotFile {
+		if this.PlotInfo == nil {
+			return fmt.Errorf("[FileInfo] PlotInfo is nil")
+		}
+		if err := this.PlotInfo.Serialize(w); err != nil {
+			return fmt.Errorf("[FileInfo] [PlotInfo:%v] serialize from error:%v", this.PlotInfo, err)
 		}
 	}
 	return nil
@@ -235,6 +250,18 @@ func (this *FileInfo) Deserialize(r io.Reader) error {
 		sectorRefs = append(sectorRefs, SectorRef{nodeAddr, sectorId})
 	}
 	this.SectorRefs = sectorRefs
+
+	if this.IsPlotFile, err = utils.ReadBool(r); err != nil {
+		return fmt.Errorf("[FileInfo] [IsPlotFile] deserialize from error:%v", err)
+	}
+
+	if this.IsPlotFile {
+		plotInfo := new(PlotInfo)
+		if err = plotInfo.Deserialize(r); err != nil {
+			return fmt.Errorf("[FileInfo] [PlotInfo] deserialize from error:%v", err)
+		}
+		this.PlotInfo = plotInfo
+	}
 	return nil
 }
 
@@ -265,6 +292,10 @@ func (this *FileInfo) Serialization(sink *common.ZeroCopySink) {
 		ref := this.SectorRefs[i]
 		utils.EncodeAddress(sink, ref.NodeAddr)
 		utils.EncodeVarUint(sink, ref.SectorID)
+	}
+	utils.EncodeBool(sink, this.IsPlotFile)
+	if this.IsPlotFile && this.PlotInfo != nil {
+		this.PlotInfo.Serialization(sink)
 	}
 }
 
@@ -378,6 +409,18 @@ func (this *FileInfo) Deserialization(source *common.ZeroCopySource) error {
 		sectorRefs = append(sectorRefs, SectorRef{nodeAddr, sectorId})
 	}
 	this.SectorRefs = sectorRefs
+
+	this.IsPlotFile, err = utils.DecodeBool(source)
+	if err != nil {
+		return err
+	}
+	if this.IsPlotFile {
+		plotInfo := new(PlotInfo)
+		if err = plotInfo.Deserialization(source); err != nil {
+			return err
+		}
+		this.PlotInfo = plotInfo
+	}
 	return nil
 }
 
@@ -412,8 +455,63 @@ func (this *FileInfoList) Deserialize(r io.Reader) error {
 		this.List = append(this.List, tmpInfo)
 	}
 	return nil
-
 }
+
+type PlotInfo struct {
+	NumericID  uint64 // numeric ID for plot file
+	StartNonce uint64 // start nonce in plot file
+	Nonces     uint64 // number of nonce in plot file
+}
+
+func (this *PlotInfo) Serialize(w io.Writer) error {
+	if err := utils.WriteVarUint(w, this.NumericID); err != nil {
+		return fmt.Errorf("[PlotInfo] [NumericID:%v] serialize from error:%v", this.NumericID, err)
+	}
+	if err := utils.WriteVarUint(w, this.StartNonce); err != nil {
+		return fmt.Errorf("[PlotInfo] [StartNonce:%v] serialize from error:%v", this.StartNonce, err)
+	}
+	if err := utils.WriteVarUint(w, this.Nonces); err != nil {
+		return fmt.Errorf("[PlotInfo] [Nonces:%v] serialize from error:%v", this.Nonces, err)
+	}
+	return nil
+}
+func (this *PlotInfo) Deserialize(r io.Reader) error {
+	var err error
+	if this.NumericID, err = utils.ReadVarUint(r); err != nil {
+		return fmt.Errorf("[PlotInfo] [NumericID] deserialize from error:%v", err)
+	}
+	if this.StartNonce, err = utils.ReadVarUint(r); err != nil {
+		return fmt.Errorf("[PlotInfo] [StartNonce] deserialize from error:%v", err)
+	}
+	if this.Nonces, err = utils.ReadVarUint(r); err != nil {
+		return fmt.Errorf("[PlotInfo] [Nonces] deserialize from error:%v", err)
+	}
+	return nil
+}
+
+func (this *PlotInfo) Serialization(sink *common.ZeroCopySink) {
+	utils.EncodeVarUint(sink, this.NumericID)
+	utils.EncodeVarUint(sink, this.StartNonce)
+	utils.EncodeVarUint(sink, this.Nonces)
+}
+
+func (this *PlotInfo) Deserialization(source *common.ZeroCopySource) error {
+	var err error
+	this.NumericID, err = utils.DecodeVarUint(source)
+	if err != nil {
+		return err
+	}
+	this.StartNonce, err = utils.DecodeVarUint(source)
+	if err != nil {
+		return err
+	}
+	this.Nonces, err = utils.DecodeVarUint(source)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func getFsFileInfo(native *native.NativeService, fileHash []byte) (*FileInfo, error) {
 	contract := native.ContextRef.CurrentContext().ContractAddress
 	fileInfoKey := GenFsFileInfoKey(contract, fileHash)
