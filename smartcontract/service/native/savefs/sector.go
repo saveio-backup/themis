@@ -63,6 +63,7 @@ func FsCreateSector(native *native.NativeService) ([]byte, error) {
 		SectorID:   sectorInfo.SectorID,
 		ProveLevel: sectorInfo.ProveLevel,
 		Size:       sectorInfo.Size,
+		IsPlots:    sectorInfo.IsPlots,
 	}
 
 	err = setSectorInfo(native, info)

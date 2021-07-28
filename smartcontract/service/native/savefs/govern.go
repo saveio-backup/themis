@@ -261,25 +261,31 @@ func FsFileProve(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, errors.NewErr("[FS Govern] FileProve GetFsFileInfo error!")
 	}
 
-	// check if the node can prove the file
-	canProve := false
-	for _, primaryNode := range fileInfo.PrimaryNodes.AddrList {
-		if primaryNode.ToBase58() == fileProve.NodeWallet.ToBase58() {
-			canProve = true
-			break
+	if fileInfo.IsPlotFile {
+		if fileProve.NodeWallet != fileInfo.FileOwner {
+			return utils.BYTE_FALSE, errors.NewErr("[FS Govern] FileProve plot file prover not owner error!")
 		}
-	}
-	if !canProve {
-		// no in primary node list, check candidate list
-		for _, candidateNode := range fileInfo.CandidateNodes.AddrList {
-			if candidateNode.ToBase58() == fileProve.NodeWallet.ToBase58() {
+	} else {
+		// check if the node can prove the file
+		canProve := false
+		for _, primaryNode := range fileInfo.PrimaryNodes.AddrList {
+			if primaryNode.ToBase58() == fileProve.NodeWallet.ToBase58() {
 				canProve = true
 				break
 			}
 		}
-	}
-	if !canProve {
-		return utils.BYTE_FALSE, errors.NewErr("[FS Govern] FileProve No in prove node list error!")
+		if !canProve {
+			// no in primary node list, check candidate list
+			for _, candidateNode := range fileInfo.CandidateNodes.AddrList {
+				if candidateNode.ToBase58() == fileProve.NodeWallet.ToBase58() {
+					canProve = true
+					break
+				}
+			}
+		}
+		if !canProve {
+			return utils.BYTE_FALSE, errors.NewErr("[FS Govern] FileProve No in prove node list error!")
+		}
 	}
 
 	nodeInfo, err := getFsNodeInfo(native, fileProve.NodeWallet)
@@ -372,6 +378,10 @@ func FsFileProve(native *native.NativeService) ([]byte, error) {
 		sectorInfo, err := getSectorInfo(native, fileProve.NodeWallet, fileProve.SectorID)
 		if err != nil {
 			return utils.BYTE_FALSE, errors.NewErr("[FS Govern] FsFileProve Sector not found")
+		}
+
+		if sectorInfo.IsPlots != fileInfo.IsPlotFile {
+			return utils.BYTE_FALSE, errors.NewErr("[FS Govern] FsFileProve file and sector type no match")
 		}
 
 		err = addFileToSector(native, sectorInfo, fileInfo)
