@@ -3,6 +3,7 @@ package savefs
 import (
 	"bytes"
 	"fmt"
+	"github.com/saveio/themis/core/types"
 
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/log"
@@ -364,7 +365,7 @@ func checkSectorProve(native *native.NativeService, sectorProve *SectorProve, se
 
 	verifier := pdp.NewPdp(0)
 
-	fileIDs, tags, updatedChal, path, rootHashes, err := prepareForPdpVerification(native, sectorInfo, challenges, &sectorProveData)
+	fileIDs, tags, updatedChal, path, rootHashes, fileInfo, err := prepareForPdpVerification(native, sectorInfo, challenges, &sectorProveData)
 	if err != nil {
 		return false, errors.NewErr("[SectorProve] prepareForPdpVerification error")
 	}
@@ -373,14 +374,55 @@ func checkSectorProve(native *native.NativeService, sectorProve *SectorProve, se
 		log.Errorf("[SectorProve] VerifyProofWithMerklePath error %s", err)
 		return false, errors.NewErr("[SectorProve] VerifyProofWithMerklePath error")
 	}
+
+	// verify the plot data in prove data
+	if sectorInfo.IsPlots {
+		// take the parameter and calculate the nonce and scoop of the first 64 bytes in first challeged
+		if !fileInfo.IsPlotFile || fileInfo.PlotInfo == nil {
+			return false, errors.NewErr("[SectorProve] first file is not a plot file")
+		}
+
+		err = verifyPlotData(fileInfo.PlotInfo, sectorProveData.PlotData, uint64(challenges[0].Index))
+		if err != nil {
+			log.Errorf("verifyPlotData error %s", err)
+			return false, errors.NewErr("[SectorProve] verify plot data error")
+		}
+	}
 	return true, nil
 }
 
+func verifyPlotData(plotInfo *PlotInfo, plotData []byte, index uint64) error {
+	nonces := plotInfo.Nonces
+	start := plotInfo.StartNonce
+	numericId := plotInfo.NumericID
+	// the index is in the whole file with non-leaf node and may be larger than number of nonces
+	index = index % nonces
+
+	log.Infof("plotInfo : start %d, nonces %d, id %d", start, nonces, numericId)
+
+	lineSize := nonces * types.SCOOP_SIZE
+
+	size := index * 256 * 1024
+	scoop := size / lineSize
+	nonce := (size%lineSize)/types.SCOOP_SIZE + start
+
+	plot := types.NewMiningPlot(int64(numericId), nonce)
+	scoopData := plot.GetScoopData(int(scoop))
+
+	log.Infof("nonce %d, scoop %d, index %d", nonce, scoop, index)
+	log.Infof("plotData %v, scoopData %v", plotData, scoopData)
+
+	if !bytes.Equal(scoopData, plotData) {
+		return errors.NewErr("scoop data no match")
+	}
+	return nil
+}
+
 func prepareForPdpVerification(native *native.NativeService, sectorInfo *SectorInfo, challenges []pdp.Challenge,
-	proveData *SectorProveData) ([]pdp.FileID, []pdp.Tag, []pdp.Challenge, []*pdp.MerklePath, [][]byte, error) {
+	proveData *SectorProveData) ([]pdp.FileID, []pdp.Tag, []pdp.Challenge, []*pdp.MerklePath, [][]byte, *FileInfo, error) {
 	err := checkSectorProveData(sectorInfo, proveData)
 	if err != nil {
-		return nil, nil, nil, nil, nil, errors.NewErr("[prepareForPdpVerification] checkSectorProveData error")
+		return nil, nil, nil, nil, nil, nil, errors.NewErr("[prepareForPdpVerification] checkSectorProveData error")
 	}
 
 	fileNum := sectorInfo.FileNum
@@ -389,12 +431,12 @@ func prepareForPdpVerification(native *native.NativeService, sectorInfo *SectorI
 	sectorFileInfos, err = getOrderedSectorFileInfosForSector(native, sectorInfo.NodeAddr, sectorInfo.SectorID)
 	if err != nil {
 		log.Errorf("getOrderedSectorFileInfosForSector error %s", err)
-		return nil, nil, nil, nil, nil, errors.NewErr("getOrderedSectorFileInfos error!")
+		return nil, nil, nil, nil, nil, nil, errors.NewErr("getOrderedSectorFileInfos error!")
 	}
 
 	if uint64(len(sectorFileInfos)) != fileNum {
 		log.Errorf("len not match : %d %d", len(sectorFileInfos), fileNum)
-		return nil, nil, nil, nil, nil, errors.NewErr("fileNum not match sectorFileInfo num!")
+		return nil, nil, nil, nil, nil, nil, errors.NewErr("fileNum not match sectorFileInfo num!")
 	}
 
 	fileIDs := make([]pdp.FileID, 0)
@@ -406,6 +448,7 @@ func prepareForPdpVerification(native *native.NativeService, sectorInfo *SectorI
 	var offset uint64
 	var curIndex = 0
 
+	var firstFileInfo *FileInfo
 	challengeLen := len(challenges)
 	for i := uint64(0); i < fileNum; i++ {
 		sectorFileInfo := sectorFileInfos[i]
@@ -422,12 +465,16 @@ func prepareForPdpVerification(native *native.NativeService, sectorInfo *SectorI
 			if chal.Index >= start && chal.Index <= end {
 				fileInfo, err := getFsFileInfo(native, fileHash)
 				if err != nil {
-					return nil, nil, nil, nil, nil, errors.NewErr("[prepareForPdpVerification] getFsFileInfo error")
+					return nil, nil, nil, nil, nil, nil, errors.NewErr("[prepareForPdpVerification] getFsFileInfo error")
 				}
 
 				proveParam, err := getProveParam(fileInfo.FileProveParam)
 				if err != nil {
-					return nil, nil, nil, nil, nil, errors.NewErr("[prepareForPdpVerification] getProveParam error")
+					return nil, nil, nil, nil, nil, nil, errors.NewErr("[prepareForPdpVerification] getProveParam error")
+				}
+
+				if firstFileInfo == nil {
+					firstFileInfo = fileInfo
 				}
 
 				fileIDs = append(fileIDs, proveParam.FileID)
@@ -442,7 +489,7 @@ func prepareForPdpVerification(native *native.NativeService, sectorInfo *SectorI
 				curIndex++
 				// reach end of indexes
 				if curIndex >= challengeLen {
-					return fileIDs, tags, updatedChal, path, rootHashes, nil
+					return fileIDs, tags, updatedChal, path, rootHashes, firstFileInfo, nil
 				}
 				// continue to check if there are other blocks challenged in same file
 				continue
@@ -452,7 +499,7 @@ func prepareForPdpVerification(native *native.NativeService, sectorInfo *SectorI
 		}
 		offset += blockCount
 	}
-	return fileIDs, tags, updatedChal, path, rootHashes, nil
+	return fileIDs, tags, updatedChal, path, rootHashes, firstFileInfo, nil
 }
 
 func checkSectorProveData(sectorInfo *SectorInfo, proveData *SectorProveData) error {
@@ -463,7 +510,10 @@ func checkSectorProveData(sectorInfo *SectorInfo, proveData *SectorProveData) er
 		return errors.NewErr("[checkSectorProveData] proveFileNum larger than challenged block num in sector")
 	}
 	if proveData.BlockNum > sectorInfo.TotalBlockNum {
-		return errors.NewErr("[checkSectorProveData] challenged block num  larger than total block num in sector")
+		return errors.NewErr("[checkSectorProveData] challenged block num larger than total block num in sector")
+	}
+	if sectorInfo.IsPlots && len(proveData.PlotData) == 0 {
+		return errors.NewErr("[checkSectorProveData] ")
 	}
 	return nil
 }

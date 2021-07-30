@@ -85,6 +85,7 @@ type SectorProveData struct {
 	Proofs       []byte
 	Tags         []pdp.Tag // tags for challenged blocks
 	MerklePath   []*pdp.MerklePath
+	PlotData     []byte
 }
 
 func (this *SectorProveData) Serialize(w io.Writer) error {
@@ -109,6 +110,9 @@ func (this *SectorProveData) Serialize(w io.Writer) error {
 		if err := path.Serialize(w); err != nil {
 			return fmt.Errorf("[SectorProveData] [MerklePath:%v] serialize from error:%v", path, err)
 		}
+	}
+	if err := utils.WriteBytes(w, this.PlotData); err != nil {
+		return fmt.Errorf("[SectorProveData] [PlotData:%v] serialize from error:%v", this.PlotData, err)
 	}
 	return nil
 }
@@ -156,5 +160,9 @@ func (this *SectorProveData) Deserialize(r io.Reader) error {
 		path = append(path, p)
 	}
 	this.MerklePath = path
+
+	if this.PlotData, err = utils.ReadBytes(r); err != nil {
+		return fmt.Errorf("[SectorProveData] [PlotData] deserialize from error:%v", err)
+	}
 	return nil
 }
