@@ -1,8 +1,6 @@
 module github.com/saveio/themis
 
-go 1.14
-
-replace github.com/saveio/carrier => ../carrier
+go 1.16
 
 require (
 	github.com/JohnCGriffin/overflow v0.0.0-20170615021017-4d914c927216
