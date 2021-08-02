@@ -98,6 +98,12 @@ func FsGetPocProveList(native *native.NativeService) ([]byte, error) {
 	}
 	list := getPocProveList(native, height)
 
+	if list == nil {
+		list = &PocProveList{
+			Proves: make([]*PocProve, 0),
+		}
+	}
+
 	sink := common.NewZeroCopySink(nil)
 
 	list.Serialization(sink)

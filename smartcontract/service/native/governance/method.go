@@ -1313,10 +1313,13 @@ func executeCommitDposEnhance(native *native.NativeService, contract common.Addr
 		log.Debugf("peer[%d] Index %d", i, peers[i].Index)
 	}
 
-	winnerInfo, err := getWinnerInfo(native, contract, view)
-	if err != nil {
-		return fmt.Errorf("executeCommitDposEnhance, get winnerInfo for view %d error: %v", view, err)
-	}
+	//Use dummy winnerInfo, since winner doesn't come from PoC param any more!
+	//Try use winner of view-1 later?
+	//winnerInfo, err := getWinnerInfo(native, contract, view)
+	//if err != nil {
+	//	return fmt.Errorf("executeCommitDposEnhance, get winnerInfo for view %d error: %v", view, err)
+	//}
+	winnerInfo := &WinnerInfo{View: view}
 
 	bf := new(bytes.Buffer)
 	if err = winnerInfo.Serialize(bf); err != nil {

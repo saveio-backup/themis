@@ -222,6 +222,43 @@ func (this *WinnerInfo) Deserialize(r io.Reader) error {
 	return nil
 }
 
+//winners info
+type WinnersInfo struct {
+	Winners []*WinnerInfo
+}
+
+func (this *WinnersInfo) Serialize(w io.Writer) error {
+	if err := serialization.WriteUint64(w, uint64(len(this.Winners))); err != nil {
+		return fmt.Errorf("serialization.WriteUint64, serialize len winners error: %v", err)
+	}
+	for _, winner := range this.Winners {
+		if err := winner.Serialize(w); err != nil {
+			return fmt.Errorf("Serialize winner error: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func (this *WinnersInfo) Deserialize(r io.Reader) error {
+	length, err := serialization.ReadUint64(r)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadUint64, deserialize winner len error: %v", err)
+	}
+
+	winners := make([]*WinnerInfo, 0)
+	for i := uint64(0); i < length; i++ {
+		w := &WinnerInfo{}
+		if err := w.Deserialize(r); err != nil {
+			return fmt.Errorf("Deserialize winner error: %v", err)
+		}
+		winners = append(winners, w)
+	}
+
+	this.Winners = winners
+	return nil
+}
+
 type PeriodInfo struct {
 	Period   uint32 // verification period
 	PlotSize uint64

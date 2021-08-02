@@ -142,6 +142,44 @@ func putWinnerInfo(native *native.NativeService, contract common.Address, view u
 	return nil
 }
 
+//WinnersInfo
+func GenWinnersInfoKey(contract common.Address, view uint32) []byte {
+	str := fmt.Sprintf(WINNERS_INFO_KEY_PATTERN, view)
+	key := append(contract[:], []byte(str)...)
+	return key
+}
+
+func getWinnersInfo(native *native.NativeService, contract common.Address, view uint32) (*WinnersInfo, error) {
+	key := GenWinnersInfoKey(contract, view)
+	winnersInfoBytes, err := native.CacheDB.Get(key)
+	if err != nil {
+		return nil, fmt.Errorf("getWinnersInfo, get winnerInfoBytes error: %v", err)
+	}
+	winnersInfo := new(WinnersInfo)
+	if winnersInfoBytes == nil {
+		return nil, fmt.Errorf("getWinnersInfo, get nil winnerInfoBytes")
+	} else {
+		value, err := cstates.GetValueFromRawStorageItem(winnersInfoBytes)
+		if err != nil {
+			return nil, fmt.Errorf("getWinnerInfo, deserialize from raw storage item err:%v", err)
+		}
+		if err := winnersInfo.Deserialize(bytes.NewBuffer(value)); err != nil {
+			return nil, fmt.Errorf("deserialize, deserialize getWinnerInfo error: %v", err)
+		}
+	}
+	return winnersInfo, nil
+}
+
+func putWinnersInfo(native *native.NativeService, contract common.Address, view uint32, winnersInfo *WinnersInfo) error {
+	key := GenWinnersInfoKey(contract, view)
+	bf := new(bytes.Buffer)
+	if err := winnersInfo.Serialize(bf); err != nil {
+		return fmt.Errorf("serialize, serialize miningInfo error: %v", err)
+	}
+	native.CacheDB.Put(key, cstates.GenRawStorageItem(bf.Bytes()))
+	return nil
+}
+
 func calGenerationSignature(lastGenerationSignature common.Uint256, lastGenerator uint64) (common.Uint256, error) {
 	buf := make([]byte, 40)
 	last := lastGenerationSignature.ToArray()
@@ -455,15 +493,19 @@ func transferDelayedBonus(native *native.NativeService, view uint32) error {
 	}
 
 	for curView := uint32(first); curView <= uint32(last); curView++ {
-		winnerInfo, err := getWinnerInfo(native, contract, curView)
+		winnersInfo, err := getWinnersInfo(native, contract, curView)
 		if err != nil {
-			return fmt.Errorf("transferDelayedBonus, get winnerInfo for view %d error: %v", view, err)
+			return fmt.Errorf("transferDelayedBonus, get winnersInfo for view %d error: %v", view, err)
 		}
 
 		// send delayed bonus to miner
 		log.Debugf("transferDelayedBonus send delayed bonus of view: %d", curView)
 		bonus := GetBlockSubsidy(curView - 1)
-		err = SplitBonus(native, winnerInfo.Address, curView, bonus, true)
+		winnerAddress := []common.Address{}
+		for _, winner := range winnersInfo.Winners {
+			winnerAddress = append(winnerAddress, winner.Address)
+		}
+		err = SplitBonus(native, winnerAddress, curView, bonus, true)
 		if err != nil {
 			return fmt.Errorf("transferDelayedBonus, SplitBonus fail %s", err)
 		}
@@ -1095,4 +1137,85 @@ func putDefConsNodes(native *native.NativeService, contract common.Address, node
 
 	native.CacheDB.Put(utils.ConcatKey(contract, []byte(DEFAULT_CONS_NODE)), cstates.GenRawStorageItem(bf.Bytes()))
 	return nil
+}
+
+//query pdp winner from FS
+func queryProveList(native *native.NativeService, contract common.Address, height uint32) ([]common.Address, error) {
+	minersPower := make(map[string]uint64)
+
+	miningView, err := GetMiningView(native, contract)
+	if err != nil {
+		return []common.Address{}, fmt.Errorf("SettleView, get view error: %v", err)
+	}
+
+	//[TODO] Need use same period with sector proof period for plot file
+	view := miningView.View + 1
+	first := int64(view) - NUM_VIEW_PER_DAY
+	if first <= 0 {
+		first = 1
+	} else {
+		first = (int64(view)-NUM_VIEW_PER_DAY)*NUM_BLOCK_PER_VIEW + 1
+	}
+	last := native.Height
+
+	for curHeight := uint32(first); curHeight < last; curHeight++ {
+		sink := common.ZeroCopySink{}
+		sink.WriteUint32(curHeight)
+
+		data, err := native.NativeCall(utils.OntFSContractAddress, "FsGetPocProveList", sink.Bytes())
+		if err != nil {
+			return []common.Address{}, fmt.Errorf("queryProveList, call FsGetPocProveList error: %v", err)
+		}
+
+		retInfo := fs.DecRet(data)
+		if retInfo.Ret {
+			prove := &fs.PocProveList{}
+			source := common.NewZeroCopySource(retInfo.Info)
+			err = prove.Deserialization(source)
+
+			if err != nil {
+				return []common.Address{}, fmt.Errorf("queryProveList error: %s", err.Error())
+			}
+
+			log.Debugf("queryProveList for height: %d, get: pdp record for %d miner\n", curHeight, len(prove.Proves))
+			for _, proof := range prove.Proves {
+				log.Debugf("queryProveList for height: %d, miner %s get: %d power\n", curHeight, proof.Miner.ToBase58(), proof.PlotSize)
+				minersPower[proof.Miner.ToBase58()] += proof.PlotSize
+			}
+		} else {
+			return []common.Address{}, errors.New(string(retInfo.Info))
+		}
+	}
+
+	type winnerInfo struct {
+		Address string
+		Power   uint64
+	}
+
+	winners := []winnerInfo{}
+	for miner, power := range minersPower {
+		winner := winnerInfo{
+			Address: miner,
+			Power:   power,
+		}
+		winners = append(winners, winner)
+	}
+
+	// sort winner by power
+	sort.SliceStable(winners, func(i, j int) bool {
+		if winners[i].Power > winners[j].Power {
+			return true
+		} else {
+			return winners[i].Address > winners[j].Address
+		}
+		return false
+	})
+
+	winnerAddress := []common.Address{}
+	for _, winner := range winners {
+		address, _ := common.AddressFromBase58(winner.Address)
+		winnerAddress = append(winnerAddress, address)
+		log.Debugf("queryProveList for view: %d, miner %s get: total %d power\n", view, winner.Address, winner.Power)
+	}
+	return winnerAddress, nil
 }
