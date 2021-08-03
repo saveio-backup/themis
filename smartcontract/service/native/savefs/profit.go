@@ -227,7 +227,7 @@ func FsStoreFile(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] ProveDetails setProveDetails error:" + err.Error())
 	}
 
-	StoreFileEvent(native, fileInfo.FileHash, fileInfo.RealFileSize, fileInfo.FileOwner, fileInfo.Deposit)
+	StoreFileEvent(native, fileInfo.FileHash, fileInfo.RealFileSize, fileInfo.FileOwner, fileInfo.Deposit, fileInfo.IsPlotFile)
 
 	return utils.BYTE_TRUE, nil
 }

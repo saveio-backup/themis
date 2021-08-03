@@ -19,7 +19,7 @@ const (
 	EVENT_FS_DELETE_SECTOR
 )
 
-func StoreFileEvent(native *native.NativeService, fileHash []byte, fileSize uint64, walletAddr common.Address, cost uint64) {
+func StoreFileEvent(native *native.NativeService, fileHash []byte, fileSize uint64, walletAddr common.Address, cost uint64, isPlotFile bool) {
 	event := map[string]interface{}{
 		"eventId":     EVENT_FS_STORE_FILE,
 		"blockHeight": native.Height,
@@ -28,6 +28,7 @@ func StoreFileEvent(native *native.NativeService, fileHash []byte, fileSize uint
 		"fileSize":    fileSize,
 		"walletAddr":  walletAddr.ToBase58(),
 		"cost":        cost,
+		"isPlotFile":  isPlotFile,
 	}
 	newEvent(native, EVENT_FS_STORE_FILE, []common.Address{walletAddr}, event)
 }
