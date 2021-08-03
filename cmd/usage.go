@@ -129,7 +129,6 @@ var AppHelpFlagGroups = []flagGroup{
 		Name: "CONSENSUS",
 		Flags: []cli.Flag{
 			utils.EnableConsensusFlag,
-			utils.EnablePoCMiningFlag,
 			utils.MaxTxInBlockFlag,
 		},
 	},

@@ -143,7 +143,6 @@ func setCommonConfig(ctx *cli.Context, cfg *config.CommonConfig) {
 
 func setConsensusConfig(ctx *cli.Context, cfg *config.ConsensusConfig) {
 	cfg.EnableConsensus = ctx.Bool(utils.GetFlagName(utils.EnableConsensusFlag))
-	cfg.EnablePoCMining = ctx.Bool(utils.GetFlagName(utils.EnablePoCMiningFlag))
 	cfg.MaxTxInBlock = ctx.Uint(utils.GetFlagName(utils.MaxTxInBlockFlag))
 }
 

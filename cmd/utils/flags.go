@@ -87,10 +87,6 @@ var (
 		Name:  "enable-consensus",
 		Usage: "Start consensus module",
 	}
-	EnablePoCMiningFlag = cli.BoolFlag{
-		Name:  "enable-poc-mining",
-		Usage: "Start poc mining module",
-	}
 	MaxTxInBlockFlag = cli.IntFlag{
 		Name:  "max-tx-in-block",
 		Usage: "Max transaction `<number>` in block",

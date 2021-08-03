@@ -81,11 +81,6 @@ func StartThemis(ctx *cli.Context) {
 		log.Errorf("initConsensus error: %s", err)
 		return
 	}
-	_, err = InitPoCMining(ctx, txpool, acc)
-	if err != nil {
-		log.Errorf("initPoCMining error:%s", err)
-		return
-	}
 
 	err = InitRpc(ctx)
 	if err != nil {
@@ -246,24 +241,6 @@ func InitConsensus(ctx *cli.Context, p2p p2p.P2P, txpoolSvr *proc.TXPoolServer, 
 
 	log.Infof("Consensus init success")
 	return consensusService, nil
-}
-
-func InitPoCMining(ctx *cli.Context, txpoolSvr *proc.TXPoolServer, acc *account.Account) (consensus.ConsensusService, error) {
-	if !config.DefConfig.Consensus.EnablePoCMining {
-		return nil, nil
-	}
-	pool := txpoolSvr.GetPID(tc.TxPoolActor)
-
-	pocPool := txpoolSvr.GetPID(tc.TxActor)
-	pocService, err := consensus.NewPoCService(acc, pocPool, pool)
-	if err != nil {
-		return nil, fmt.Errorf("NewConsensusService: PoC error:%s", err)
-	}
-	pocService.Start()
-	bactor.SetPoCConsensusPid(pocService.GetPID())
-	log.Infof("PoC Mining init success")
-
-	return pocService, nil
 }
 
 func InitRpc(ctx *cli.Context) error {

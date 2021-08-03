@@ -64,7 +64,6 @@ func setupAPP() *cli.App {
 		utils.AccountPassFlag,
 		//consensus setting
 		utils.EnableConsensusFlag,
-		utils.EnablePoCMiningFlag,
 		utils.MaxTxInBlockFlag,
 		//poc setting
 		utils.PlotDirFlag,

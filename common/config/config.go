@@ -591,7 +591,6 @@ type CommonConfig struct {
 
 type ConsensusConfig struct {
 	EnableConsensus bool
-	EnablePoCMining bool
 	MaxTxInBlock    uint
 }
 
@@ -685,7 +684,6 @@ func NewThemisConfig() *ThemisConfig {
 		},
 		Consensus: &ConsensusConfig{
 			EnableConsensus: true,
-			EnablePoCMining: false,
 			MaxTxInBlock:    DEFAULT_MAX_TX_IN_BLOCK,
 		},
 		P2PNode: &P2PNodeConfig{

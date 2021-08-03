@@ -43,10 +43,6 @@ func StartLocalServer() error {
 	rpc.HandleFunc("startconsensus", rpc.StartConsensus)
 	rpc.HandleFunc("stopconsensus", rpc.StopConsensus)
 	rpc.HandleFunc("setdebuginfo", rpc.SetDebugInfo)
-	rpc.HandleFunc("removeplotfile", rpc.RemovePlotFile)
-	rpc.HandleFunc("setsipvoteinfo", rpc.SetSipVoteInfo)
-	rpc.HandleFunc("setconsvoteinfo", rpc.SetConsVoteInfo)
-	rpc.HandleFunc("triggerconselect", rpc.TriggerConsElect)
 
 	// TODO: only listen to local host
 	err := http.ListenAndServe(LOCAL_HOST+":"+strconv.Itoa(int(cfg.DefConfig.Rpc.HttpLocalPort)), nil)

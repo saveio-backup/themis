@@ -21,7 +21,6 @@ package rpc
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/saveio/themis/common/log"
@@ -99,105 +98,5 @@ func SetDebugInfo(params []interface{}) map[string]interface{} {
 	default:
 		return responsePack(berr.INVALID_PARAMS, "")
 	}
-	return responsePack(berr.SUCCESS, true)
-}
-
-//remove plot from poc miner
-//{"jsonrpc": "2.0", "method": "removeplotfile", "params": ["/plotDir/12345678_1_1024"], "id": 0}
-func RemovePlotFile(params []interface{}) map[string]interface{} {
-	if len(params) > 1 {
-		return responsePack(berr.INVALID_PARAMS, "")
-	}
-
-	plotfile := ""
-	for i := 0; i < len(params); i++ {
-		switch params[i].(type) {
-		case string:
-			plotfile = params[i].(string)
-			break
-		default:
-			return responsePack(berr.INVALID_PARAMS, "")
-		}
-	}
-
-	if err := bactor.RemovePlotFile(plotfile); err != nil {
-		return responsePack(berr.INTERNAL_ERROR, false)
-	}
-	return responsePack(berr.SUCCESS, true)
-}
-
-//set Sip vote decision
-//{"jsonrpc": "2.0", "method": "setvoteinfo", "params": ["sipIndex", "agree"], "id": 0}
-func SetSipVoteInfo(params []interface{}) map[string]interface{} {
-	var sipIndex uint32
-	var agree byte
-
-	if len(params) < 2 {
-		return responsePack(berr.INVALID_PARAMS, "")
-	}
-	switch params[0].(type) {
-	case float64:
-		sipIndex = uint32(params[0].(float64))
-	default:
-		return responsePack(berr.INVALID_PARAMS, "")
-	}
-
-	switch params[1].(type) {
-	case string:
-		str := params[1].(string)
-
-		if strings.ToLower(str) == "agree" {
-			agree = 1
-		}
-
-	default:
-		return responsePack(berr.INVALID_PARAMS, "")
-	}
-
-	_, err := common.GetSipInfo(sipIndex)
-	if err != nil {
-		return responsePack(berr.INVALID_PARAMS, "")
-	}
-
-	if err := bactor.SetSipVoteInfo(sipIndex, agree); err != nil {
-		return responsePack(berr.INTERNAL_ERROR, false)
-	}
-
-	return responsePack(berr.SUCCESS, true)
-}
-
-//set consensus vote decision.
-//{"jsonrpc": "2.0", "method": "setvoteinfo", "params": ["node1pubkey", "node1pubkey"], "id": 0}
-func SetConsVoteInfo(params []interface{}) map[string]interface{} {
-	if len(params) < 1 || len(params) > 3 {
-		return responsePack(berr.INVALID_PARAMS, "")
-	}
-
-	nodesPubkey := []string{}
-	for i := 0; i < len(params); i++ {
-		switch params[i].(type) {
-		case string:
-			pubkey := params[i].(string)
-			nodesPubkey = append(nodesPubkey, pubkey)
-		default:
-			return responsePack(berr.INVALID_PARAMS, "")
-		}
-	}
-
-	if err := bactor.SetConsVoteInfo(nodesPubkey); err != nil {
-		return responsePack(berr.INTERNAL_ERROR, false)
-	}
-
-	return responsePack(berr.SUCCESS, true)
-}
-
-//set consensus vote decision.
-//{"jsonrpc": "2.0", "method": "triggerconselect"}
-func TriggerConsElect(params []interface{}) map[string]interface{} {
-
-	if err := bactor.TriggerConsElect(); err != nil {
-		return responsePack(berr.INTERNAL_ERROR, false)
-	}
-
 	return responsePack(berr.SUCCESS, true)
 }
