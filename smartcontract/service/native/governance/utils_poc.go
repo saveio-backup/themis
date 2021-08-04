@@ -234,35 +234,6 @@ func verifyNonce(param *SubmitNonceParam, scoop uint32, baseTarget int64, gensig
 	return param.Deadline == deadline
 }
 
-// period summary info
-func GenPeriodSummaryKey(contract common.Address, period uint32) []byte {
-	str := fmt.Sprintf(PERIOD_SUMMARY_KEY_PATTERN, period)
-	key := append(contract[:], []byte(str)...)
-
-	return key
-
-}
-
-func getPeriodSummary(native *native.NativeService, period uint32) (*PeriodSummary, error) {
-	contract := native.ContextRef.CurrentContext().ContractAddress
-	key := GenPeriodSummaryKey(contract, period)
-	periodSummaryBytes, err := utils.GetStorageItem(native, key)
-	if err != nil {
-		return nil, fmt.Errorf("get periodSummaryBytes error: %v", err)
-	}
-
-	periodSummary := &PeriodSummary{
-		MinerWinTimes: make(map[common.Address]int64),
-	}
-
-	if periodSummaryBytes != nil {
-		if err := periodSummary.Deserialize(bytes.NewBuffer(periodSummaryBytes.Value)); err != nil {
-			return nil, fmt.Errorf("deserialize, deserialize periodInfos error: %v", err)
-		}
-	}
-	return periodSummary, nil
-}
-
 //calculate bonus
 func GetBlockSubsidy(view uint32) uint64 {
 	halvings := uint64(view) / HALVING_INTERVAL
