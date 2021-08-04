@@ -51,6 +51,7 @@ const (
 	CONS_GROUP_INFO                   = "consGroup"
 	CONS_VOTE_REVENUE                 = "consVoteRevenue"
 	DEFAULT_CONS_NODE                 = "defaultConsNodes"
+	MINER_POWER_MAP                   = "minerPowerMap"
 
 	DIFF_ADJUST_CHANGE_BLOCK = 2700
 
@@ -153,6 +154,15 @@ func InitPoCConfig(native *native.NativeService) ([]byte, error) {
 	err = putConsVoteRevenue(native, contract, consVoteRevenue)
 	if err != nil {
 		return utils.BYTE_FALSE, fmt.Errorf("InitSIPConfig, put consVoteRevenue error: %v", err)
+	}
+
+	//init miner power map
+	minerPowerMap := &MinerPowerMap{
+		MinerPowerMap: make(map[common.Address]*MinerPowerItem),
+	}
+	err = putMinerPowerMap(native, contract, minerPowerMap)
+	if err != nil {
+		return utils.BYTE_FALSE, fmt.Errorf("putMinerPowerMap, put minerPowerMap error: %v", err)
 	}
 
 	return utils.BYTE_TRUE, nil
@@ -626,10 +636,10 @@ func SettleView(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, fmt.Errorf("[SettleView], handleDeadline error: %v", err)
 	}
 
-	//record pdp winners
-	winnersAddress, err := queryProveList(native, contract, native.Height)
+	//update miner power map then record pdp winners
+	winnersAddress, err := updateMinerPowerMap(native, contract, native.Height)
 	if err != nil {
-		return utils.BYTE_FALSE, fmt.Errorf("[SettleView], queryProveList error: %v", err)
+		return utils.BYTE_FALSE, fmt.Errorf("[SettleView], updateMinerPowerMap error: %v", err)
 	}
 	//use fake winner if no pdp!
 	if len(winnersAddress) == 0 {

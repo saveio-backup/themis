@@ -1140,21 +1140,22 @@ func putDefConsNodes(native *native.NativeService, contract common.Address, node
 }
 
 //query pdp winner from FS
-func queryProveList(native *native.NativeService, contract common.Address, height uint32) ([]common.Address, error) {
-	minersPower := make(map[string]uint64)
-
+func updateMinerPowerMap(native *native.NativeService, contract common.Address, height uint32) ([]common.Address, error) {
 	miningView, err := GetMiningView(native, contract)
 	if err != nil {
 		return []common.Address{}, fmt.Errorf("SettleView, get view error: %v", err)
 	}
 
-	//[TODO] Need use same period with sector proof period for plot file
+	minerPowerMap, err := GetMinerPowerMap(native, contract)
+	if err != nil {
+		return []common.Address{}, fmt.Errorf("updateMinerPowerMap, get minerPowerMap error: %v", err)
+	}
+
+	//increate pdp in new view
 	view := miningView.View + 1
-	first := int64(view) - NUM_VIEW_PER_DAY
+	first := native.Height - NUM_BLOCK_PER_VIEW + 1
 	if first <= 0 {
 		first = 1
-	} else {
-		first = (int64(view)-NUM_VIEW_PER_DAY)*NUM_BLOCK_PER_VIEW + 1
 	}
 	last := native.Height
 
@@ -1164,7 +1165,7 @@ func queryProveList(native *native.NativeService, contract common.Address, heigh
 
 		data, err := native.NativeCall(utils.OntFSContractAddress, "FsGetPocProveList", sink.Bytes())
 		if err != nil {
-			return []common.Address{}, fmt.Errorf("queryProveList, call FsGetPocProveList error: %v", err)
+			return []common.Address{}, fmt.Errorf("updateMinerPowerMap, call FsGetPocProveList error: %v", err)
 		}
 
 		retInfo := fs.DecRet(data)
@@ -1174,29 +1175,74 @@ func queryProveList(native *native.NativeService, contract common.Address, heigh
 			err = prove.Deserialization(source)
 
 			if err != nil {
-				return []common.Address{}, fmt.Errorf("queryProveList error: %s", err.Error())
+				return []common.Address{}, fmt.Errorf("updateMinerPowerMap error: %s", err.Error())
 			}
 
-			log.Debugf("queryProveList for height: %d, get: pdp record for %d miner\n", curHeight, len(prove.Proves))
+			log.Debugf("updateMinerPowerMap for height: %d, get: pdp record for %d miner\n", curHeight, len(prove.Proves))
 			for _, proof := range prove.Proves {
-				log.Debugf("queryProveList for height: %d, miner %s get: %d power\n", curHeight, proof.Miner.ToBase58(), proof.PlotSize)
-				minersPower[proof.Miner.ToBase58()] += proof.PlotSize
+				log.Debugf("updateMinerPowerMap for height: %d, miner %s get: %d power\n", curHeight, proof.Miner.ToBase58(), proof.PlotSize)
+				if _, ok := minerPowerMap.MinerPowerMap[proof.Miner]; !ok {
+					minerPowerMap.MinerPowerMap[proof.Miner] = &MinerPowerItem{Address: proof.Miner}
+				}
+				minerPowerMap.MinerPowerMap[proof.Miner].Power += proof.PlotSize
 			}
 		} else {
 			return []common.Address{}, errors.New(string(retInfo.Info))
 		}
 	}
 
-	type winnerInfo struct {
-		Address string
-		Power   uint64
+	//[TODO] Need use same period with sector proof period for plot file
+	//reduce pdp in expired view
+	if int64(view)-NUM_VIEW_PER_DAY <= 0 {
+		first = native.Height
+		last = native.Height
+	} else {
+		last = native.Height - view*NUM_VIEW_PER_DAY*NUM_BLOCK_PER_VIEW
+		first = last - NUM_BLOCK_PER_VIEW + 1
 	}
 
-	winners := []winnerInfo{}
-	for miner, power := range minersPower {
-		winner := winnerInfo{
-			Address: miner,
-			Power:   power,
+	for curHeight := uint32(first); curHeight < last; curHeight++ {
+		sink := common.ZeroCopySink{}
+		sink.WriteUint32(curHeight)
+
+		data, err := native.NativeCall(utils.OntFSContractAddress, "FsGetPocProveList", sink.Bytes())
+		if err != nil {
+			return []common.Address{}, fmt.Errorf("updateMinerPowerMap, call FsGetPocProveList error: %v", err)
+		}
+
+		retInfo := fs.DecRet(data)
+		if retInfo.Ret {
+			prove := &fs.PocProveList{}
+			source := common.NewZeroCopySource(retInfo.Info)
+			err = prove.Deserialization(source)
+
+			if err != nil {
+				return []common.Address{}, fmt.Errorf("updateMinerPowerMap error: %s", err.Error())
+			}
+
+			log.Debugf("updateMinerPowerMap for height: %d, get: pdp record for %d miner\n", curHeight, len(prove.Proves))
+			for _, proof := range prove.Proves {
+				log.Debugf("updateMinerPowerMap for height: %d, miner %s get: %d power\n", curHeight, proof.Miner.ToBase58(), proof.PlotSize)
+				if _, ok := minerPowerMap.MinerPowerMap[proof.Miner]; !ok {
+					continue
+				}
+
+				if minerPowerMap.MinerPowerMap[proof.Miner].Power <= proof.PlotSize {
+					delete(minerPowerMap.MinerPowerMap, proof.Miner)
+				} else {
+					minerPowerMap.MinerPowerMap[proof.Miner].Power -= proof.PlotSize
+				}
+			}
+		} else {
+			return []common.Address{}, errors.New(string(retInfo.Info))
+		}
+	}
+
+	winners := []MinerPowerItem{}
+	for _, miner := range minerPowerMap.MinerPowerMap {
+		winner := MinerPowerItem{
+			Address: miner.Address,
+			Power:   miner.Power,
 		}
 		winners = append(winners, winner)
 	}
@@ -1206,16 +1252,56 @@ func queryProveList(native *native.NativeService, contract common.Address, heigh
 		if winners[i].Power > winners[j].Power {
 			return true
 		} else {
-			return winners[i].Address > winners[j].Address
+			return winners[i].Address.ToBase58() > winners[j].Address.ToBase58()
 		}
 		return false
 	})
 
 	winnerAddress := []common.Address{}
 	for _, winner := range winners {
-		address, _ := common.AddressFromBase58(winner.Address)
+		address := winner.Address
 		winnerAddress = append(winnerAddress, address)
-		log.Debugf("queryProveList for view: %d, miner %s get: total %d power\n", view, winner.Address, winner.Power)
+		log.Debugf("updateMinerPowerMap for view: %d, miner %s get: total %d power\n", view, winner.Address, winner.Power)
 	}
+
+	err = putMinerPowerMap(native, contract, minerPowerMap)
+	if err != nil {
+		return []common.Address{}, fmt.Errorf("putConsVoteMap error: %v", err)
+	}
+
 	return winnerAddress, nil
+}
+
+func GetMinerPowerMap(native *native.NativeService, contract common.Address) (*MinerPowerMap, error) {
+	minerPowerMap := &MinerPowerMap{
+		MinerPowerMap: make(map[common.Address]*MinerPowerItem),
+	}
+
+	minerPowerMapBytes, err := native.CacheDB.Get(utils.ConcatKey(contract, []byte(MINER_POWER_MAP)))
+	if err != nil {
+		return nil, fmt.Errorf("GetMinerPowerMap, get minerPowerMap error: %v", err)
+	}
+	if minerPowerMapBytes == nil {
+		return nil, fmt.Errorf("GetMinerPowerMap, minerPowerMap is nil")
+	}
+	item := cstates.StorageItem{}
+	err = item.Deserialization(common.NewZeroCopySource(minerPowerMapBytes))
+	if err != nil {
+		return nil, fmt.Errorf("deserialize minerPowerMap error:%v", err)
+	}
+
+	if err := minerPowerMap.Deserialize(bytes.NewBuffer(item.Value)); err != nil {
+		return nil, fmt.Errorf("deserialize, deserialize minerPowerMap error: %v", err)
+	}
+	return minerPowerMap, nil
+}
+
+func putMinerPowerMap(native *native.NativeService, contract common.Address, minerPowerMap *MinerPowerMap) error {
+	bf := new(bytes.Buffer)
+	if err := minerPowerMap.Serialize(bf); err != nil {
+		return fmt.Errorf("serialize, serialize minerPowerMap error: %v", err)
+	}
+
+	native.CacheDB.Put(utils.ConcatKey(contract, []byte(MINER_POWER_MAP)), cstates.GenRawStorageItem(bf.Bytes()))
+	return nil
 }

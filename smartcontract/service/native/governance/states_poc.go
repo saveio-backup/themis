@@ -616,3 +616,69 @@ func (this *ConsVoteRevenue) Deserialize(r io.Reader) error {
 	this.Total = total
 	return nil
 }
+
+type MinerPowerItem struct {
+	Address common.Address //miner wallet address
+	Power   uint64         //power based on accumulated pdp
+}
+
+func (this *MinerPowerItem) Serialize(w io.Writer) error {
+	if err := serialization.WriteVarBytes(w, this.Address[:]); err != nil {
+		return fmt.Errorf("serialization.WriteVarBytes, address address error: %v", err)
+	}
+	if err := serialization.WriteUint64(w, this.Power); err != nil {
+		return fmt.Errorf("serialization.WriteUint32, serialize vote revenue error: %v", err)
+	}
+
+	return nil
+}
+
+func (this *MinerPowerItem) Deserialize(r io.Reader) error {
+	address, err := utils.ReadAddress(r)
+	if err != nil {
+		return fmt.Errorf("utils.ReadAddress, deserialize address error: %v", err)
+	}
+	power, err := serialization.ReadUint64(r)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadUint32, deserialize height error: %v", err)
+	}
+
+	this.Address = address
+	this.Power = power
+
+	return nil
+}
+
+type MinerPowerMap struct {
+	MinerPowerMap map[common.Address]*MinerPowerItem
+}
+
+func (this *MinerPowerMap) Serialize(w io.Writer) error {
+	if err := serialization.WriteUint32(w, uint32(len(this.MinerPowerMap))); err != nil {
+		return fmt.Errorf("serialization.WriteUint32, serialize ConsVoteMap length error: %v", err)
+	}
+
+	for _, v := range this.MinerPowerMap {
+		if err := v.Serialize(w); err != nil {
+			return fmt.Errorf("serialize consVoteMap error: %v", err)
+		}
+	}
+	return nil
+}
+
+func (this *MinerPowerMap) Deserialize(r io.Reader) error {
+	n, err := serialization.ReadUint32(r)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadUint32, deserialize MinerPowerMap length error: %v", err)
+	}
+	minerPowerMap := make(map[common.Address]*MinerPowerItem)
+	for i := 0; uint32(i) < n; i++ {
+		minerPowerItem := new(MinerPowerItem)
+		if err := minerPowerItem.Deserialize(r); err != nil {
+			return fmt.Errorf("deserialize peerPool error: %v", err)
+		}
+		minerPowerMap[minerPowerItem.Address] = minerPowerItem
+	}
+	this.MinerPowerMap = minerPowerMap
+	return nil
+}
