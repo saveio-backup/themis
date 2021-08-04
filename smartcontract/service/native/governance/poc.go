@@ -22,7 +22,6 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"math/big"
 	"sort"
 
 	"github.com/saveio/themis/common"
@@ -299,12 +298,6 @@ func UpdateTarget(native *native.NativeService, submitInfo *SubmitNonceParam) ([
 		return utils.BYTE_FALSE, fmt.Errorf("UpdateTarget, electConsGroup error: %v", err)
 	}
 
-	// update mining period info
-	err = updatePeriod(native, uint32(view))
-	if err != nil {
-		return utils.BYTE_FALSE, fmt.Errorf("UpdateTarget, updatePeriod error: %v", err)
-	}
-
 	// transfer delayed bonus
 	err = transferDelayedBonus(native, view)
 	if err != nil {
@@ -314,35 +307,9 @@ func UpdateTarget(native *native.NativeService, submitInfo *SubmitNonceParam) ([
 	return utils.BYTE_TRUE, nil
 }
 
-//record deadline for each miner,cal avg deadline for winner
-func handleDeadline(native *native.NativeService, param *SubmitNonceParam, winner common.Address) error {
-	contract := native.ContextRef.CurrentContext().ContractAddress
-
-	//update period avg deadline and estimate plot of winner based on win times
-	miningView, err := GetMiningView(native, contract)
-	if err != nil {
-		return fmt.Errorf("handleDeadline, get view error: %v", err)
-	}
-	view := miningView.View + 1
-
-	recordPeriodSummary(native, param)
-
-	//update winner period info with avg deadline
-	if PledgeViewInMiningPeriod(view) {
-		summaryPeriod(native, view)
-		triggerPledgeForPeriod(native, view)
-	}
-	return nil
-}
-
 //Go to next PoC mining view. Adjust target etc
 func SplitBonus(native *native.NativeService, winners []common.Address, view uint32, bonus uint64, delayed bool) error {
 	contract := native.ContextRef.CurrentContext().ContractAddress
-
-	//percent, err := checkPeriodsInfo(native, winner)
-	//if err != nil {
-	//	return fmt.Errorf("SettleView, checkPeriodsInfo %s", err)
-	//}
 
 	// transfer bonus based on globalParam
 	globalParam, err := getGlobalParam(native, contract)
@@ -627,14 +594,9 @@ func SettleView(native *native.NativeService) ([]byte, error) {
 
 	log.Debugf("SettleView for view: %d, id: %d, nonce: %d, deadline: %d\n", submitInfo.View, submitInfo.Id, submitInfo.Nonce, submitInfo.Deadline)
 
-	plotSize := CalPlotFileSize(submitInfo.Deadline)
-	log.Debugf("SettleView: plot size calculated for deadline %d is %d MB", submitInfo.Deadline, plotSize)
-
-	//record deadline for each miner for each period
-	err = handleDeadline(native, submitInfo, submitInfo.Address)
-	if err != nil {
-		return utils.BYTE_FALSE, fmt.Errorf("[SettleView], handleDeadline error: %v", err)
-	}
+	//Don't use deadline any more
+	//plotSize := CalPlotFileSize(submitInfo.Deadline)
+	//log.Debugf("SettleView: plot size calculated for deadline %d is %d MB", submitInfo.Deadline, plotSize)
 
 	//update miner power map then record pdp winners
 	winnersAddress, err := updateMinerPowerMap(native, contract, native.Height)
@@ -689,117 +651,4 @@ func SettleView(native *native.NativeService) ([]byte, error) {
 	}
 
 	return utils.BYTE_TRUE, nil
-}
-
-//record avg deadlines found in one period and win time for every winner
-func recordPeriodSummary(native *native.NativeService, winner *SubmitNonceParam) error {
-	contract := native.ContextRef.CurrentContext().ContractAddress
-	miningView, err := GetMiningView(native, contract)
-	if err != nil {
-		return fmt.Errorf("recordPeriodSummary, get view error: %v", err)
-	}
-
-	view := miningView.View + 1
-	period := (view + NUM_VIEW_PER_PERIOD - 1) / NUM_VIEW_PER_PERIOD
-
-	info, err := getPeriodSummary(native, period)
-	if err != nil {
-		return fmt.Errorf("recordPeriodSummary get period summary info error: %v", err)
-	}
-
-	viewInPeriod := view - (period-1)*NUM_VIEW_PER_PERIOD
-	avgDeadline := big.NewInt(1)
-	avgDeadline.SetUint64(info.AvgDeadline)
-	sumDeadline := big.NewInt(1)
-	sumDeadline = sumDeadline.Mul(avgDeadline, big.NewInt(1).SetUint64(uint64(viewInPeriod-1)))
-	winnerDeadline := big.NewInt(1)
-	winnerDeadline.SetUint64(winner.Deadline)
-	sumDeadline = sumDeadline.Add(sumDeadline, winnerDeadline)
-	newAvg := sumDeadline.Div(sumDeadline, big.NewInt(1).SetUint64(uint64(viewInPeriod)))
-
-	info.AvgDeadline = newAvg.Uint64()
-	info.MinerWinTimes[winner.Address]++
-
-	err = putPeriodSummary(native, period, info)
-	if err != nil {
-		return fmt.Errorf("recordPeriodSummary put period summary info error: %v", err)
-	}
-
-	return nil
-}
-
-// estimate plot for winner during period!
-func summaryPeriod(native *native.NativeService, view uint32) error {
-	period := GetMiningPeriod(view)
-
-	summary, err := getPeriodSummary(native, period)
-	if err != nil {
-		return fmt.Errorf("summaryPeriod get period summary  error: %v", err)
-	}
-
-	totalPlotSize := CalPlotFileSize(summary.AvgDeadline)
-	viewInPeriod := view % NUM_VIEW_PER_PERIOD
-	if viewInPeriod == 0 {
-		viewInPeriod = NUM_VIEW_PER_PERIOD
-	}
-
-	log.Debugf("summaryPeriod calculate total plot size %d(MB)", totalPlotSize)
-	for addr, times := range summary.MinerWinTimes {
-		info, err := getPeriodInfos(native, addr)
-		if err != nil {
-			return fmt.Errorf("summaryPeriod error: %v", err)
-		}
-
-		plotSize := totalPlotSize * uint64(times) / uint64(viewInPeriod)
-		info.curPeriod.Period = period
-		info.curPeriod.PlotSize = plotSize
-
-		log.Debugf("summaryPeriod calculate plot size %d(MB) for miner %s", plotSize, addr.ToBase58())
-
-		err = putPeriodsInfo(native, addr, info)
-		if err != nil {
-			return fmt.Errorf("summaryPeriod error: %v", err)
-		}
-	}
-
-	return nil
-}
-
-func checkPeriodsInfo(native *native.NativeService, address common.Address) (uint64, error) {
-	contract := native.ContextRef.CurrentContext().ContractAddress
-	miningView, err := GetMiningView(native, contract)
-	if err != nil {
-		return 0, fmt.Errorf("checkPeriodsInfo, get view error: %v", err)
-	}
-
-	view := miningView.View + 1
-	period := (view + NUM_VIEW_PER_PERIOD - 1) / NUM_VIEW_PER_PERIOD
-	needCheckPlot := period > 1 && (view-(period-1)*NUM_VIEW_PER_PERIOD) <= NUM_VIEW_PER_VERIFY_PERIOD
-
-	if needCheckPlot {
-		vol, err := queryVolume(native, address)
-		if err != nil {
-			//make settle continue
-			return 0, nil
-		}
-		log.Debugf("checkPeriodsInfo: miner %s has volume %d MB", address.ToBase58(), vol)
-		//ensure fs space reach plotSize * 10%, using pre period info!!
-		info, err := getPeriodInfos(native, address)
-		if err != nil {
-			return 0, fmt.Errorf("checkPeriodsInfo error: %v", err)
-		}
-
-		expectSize := info.prePeriod.PlotSize
-		log.Debugf("checkPeriodsInfo: plot size calculated for pre period is %d MB", expectSize)
-
-		//FS vol is k, adjust to M
-		realSize := vol / 1024
-		fullBonusSize := expectSize * FS_PLOT_EXPECTED_PERCENT / 100
-		if realSize >= fullBonusSize {
-			return 100, nil
-		} else {
-			return realSize * 100 / fullBonusSize, nil
-		}
-	}
-	return 100, nil
 }

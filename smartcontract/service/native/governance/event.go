@@ -31,12 +31,6 @@ type pledgeForConsEvent struct {
 	ConsGovPeriod uint32
 }
 
-type ensureSpaceForMiningEvent struct {
-	MiningPeriod uint32
-	PlotSize     uint64
-	Address      string
-}
-
 func newEvent(srvc *native.NativeService, id uint32, st interface{}) {
 	e := event.NotifyEventInfo{}
 	e.ContractAddress = srvc.ContextRef.CurrentContext().ContractAddress
@@ -78,15 +72,4 @@ func PledgeForConsEvent(native *native.NativeService, pledge *pledgeForConsEvent
 		"consGovPeriod": pledge.ConsGovPeriod,
 	}
 	newEvent(native, EVENT_PLEDGE_FOR_CONS, event)
-}
-
-func EnsureSpaceForMiningEvent(native *native.NativeService, ensure *ensureSpaceForMiningEvent) {
-	event := map[string]interface{}{
-		"blockHeight":  native.Height,
-		"eventName":    "ensureSpaceForMining",
-		"miningPeriod": ensure.MiningPeriod,
-		"plotSize":     ensure.PlotSize,
-		"address":      ensure.Address,
-	}
-	newEvent(native, EVENT_ENSURE_SPACE_FOR_MINING, event)
 }
