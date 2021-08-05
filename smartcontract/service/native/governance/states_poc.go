@@ -129,6 +129,7 @@ type WinnerInfo struct {
 	View     uint32
 	Address  common.Address
 	Deadline uint64
+	Power    uint64 //power based on accumulated pdp
 
 	//vote info
 	VoteConsPub []string
@@ -145,6 +146,9 @@ func (this *WinnerInfo) Serialize(w io.Writer) error {
 	}
 	if err := serialization.WriteUint64(w, uint64(this.Deadline)); err != nil {
 		return fmt.Errorf("serialization.WriteBool, serialize difficulty error: %v", err)
+	}
+	if err := serialization.WriteUint64(w, uint64(this.Power)); err != nil {
+		return fmt.Errorf("serialization.WriteUint64, serialize power error: %v", err)
 	}
 
 	//cons vote by pub key
@@ -186,10 +190,15 @@ func (this *WinnerInfo) Deserialize(r io.Reader) error {
 	if err != nil {
 		return fmt.Errorf("serialization.ReadUint32, deserialize height error: %v", err)
 	}
+	power, err := serialization.ReadUint64(r)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadUint64, deserialize power error: %v", err)
+	}
 
 	this.View = uint32(view)
 	this.Address = address
 	this.Deadline = deadline
+	this.Power = power
 
 	//vote info pubkey
 	voteConsPubLen, err := serialization.ReadUint64(r)

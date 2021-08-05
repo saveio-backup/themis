@@ -335,11 +335,8 @@ func transferDelayedBonus(native *native.NativeService, view uint32) error {
 		// send delayed bonus to miner
 		log.Debugf("transferDelayedBonus send delayed bonus of view: %d", curView)
 		bonus := GetBlockSubsidy(curView - 1)
-		winnerAddress := []common.Address{}
-		for _, winner := range winnersInfo.Winners {
-			winnerAddress = append(winnerAddress, winner.Address)
-		}
-		err = SplitBonus(native, winnerAddress, curView, bonus, true)
+
+		err = SplitBonus(native, winnersInfo.Winners, curView, bonus, true)
 		if err != nil {
 			return fmt.Errorf("transferDelayedBonus, SplitBonus fail %s", err)
 		}
@@ -974,15 +971,15 @@ func putDefConsNodes(native *native.NativeService, contract common.Address, node
 }
 
 //query pdp winner from FS
-func updateMinerPowerMap(native *native.NativeService, contract common.Address, height uint32) ([]common.Address, error) {
+func updateMinerPowerMap(native *native.NativeService, contract common.Address, height uint32) ([]*MinerPowerItem, error) {
 	miningView, err := GetMiningView(native, contract)
 	if err != nil {
-		return []common.Address{}, fmt.Errorf("SettleView, get view error: %v", err)
+		return []*MinerPowerItem{}, fmt.Errorf("SettleView, get view error: %v", err)
 	}
 
 	minerPowerMap, err := GetMinerPowerMap(native, contract)
 	if err != nil {
-		return []common.Address{}, fmt.Errorf("updateMinerPowerMap, get minerPowerMap error: %v", err)
+		return []*MinerPowerItem{}, fmt.Errorf("updateMinerPowerMap, get minerPowerMap error: %v", err)
 	}
 
 	//increate pdp in new view
@@ -999,7 +996,7 @@ func updateMinerPowerMap(native *native.NativeService, contract common.Address, 
 
 		data, err := native.NativeCall(utils.OntFSContractAddress, "FsGetPocProveList", sink.Bytes())
 		if err != nil {
-			return []common.Address{}, fmt.Errorf("updateMinerPowerMap, call FsGetPocProveList error: %v", err)
+			return []*MinerPowerItem{}, fmt.Errorf("updateMinerPowerMap, call FsGetPocProveList error: %v", err)
 		}
 
 		retInfo := fs.DecRet(data)
@@ -1009,7 +1006,7 @@ func updateMinerPowerMap(native *native.NativeService, contract common.Address, 
 			err = prove.Deserialization(source)
 
 			if err != nil {
-				return []common.Address{}, fmt.Errorf("updateMinerPowerMap error: %s", err.Error())
+				return []*MinerPowerItem{}, fmt.Errorf("updateMinerPowerMap error: %s", err.Error())
 			}
 
 			log.Debugf("updateMinerPowerMap for height: %d, get: pdp record for %d miner\n", curHeight, len(prove.Proves))
@@ -1021,7 +1018,7 @@ func updateMinerPowerMap(native *native.NativeService, contract common.Address, 
 				minerPowerMap.MinerPowerMap[proof.Miner].Power += proof.PlotSize
 			}
 		} else {
-			return []common.Address{}, errors.New(string(retInfo.Info))
+			return []*MinerPowerItem{}, errors.New(string(retInfo.Info))
 		}
 	}
 
@@ -1041,7 +1038,7 @@ func updateMinerPowerMap(native *native.NativeService, contract common.Address, 
 
 		data, err := native.NativeCall(utils.OntFSContractAddress, "FsGetPocProveList", sink.Bytes())
 		if err != nil {
-			return []common.Address{}, fmt.Errorf("updateMinerPowerMap, call FsGetPocProveList error: %v", err)
+			return []*MinerPowerItem{}, fmt.Errorf("updateMinerPowerMap, call FsGetPocProveList error: %v", err)
 		}
 
 		retInfo := fs.DecRet(data)
@@ -1051,7 +1048,7 @@ func updateMinerPowerMap(native *native.NativeService, contract common.Address, 
 			err = prove.Deserialization(source)
 
 			if err != nil {
-				return []common.Address{}, fmt.Errorf("updateMinerPowerMap error: %s", err.Error())
+				return []*MinerPowerItem{}, fmt.Errorf("updateMinerPowerMap error: %s", err.Error())
 			}
 
 			log.Debugf("updateMinerPowerMap for height: %d, get: pdp record for %d miner\n", curHeight, len(prove.Proves))
@@ -1068,13 +1065,13 @@ func updateMinerPowerMap(native *native.NativeService, contract common.Address, 
 				}
 			}
 		} else {
-			return []common.Address{}, errors.New(string(retInfo.Info))
+			return []*MinerPowerItem{}, errors.New(string(retInfo.Info))
 		}
 	}
 
-	winners := []MinerPowerItem{}
+	winners := []*MinerPowerItem{}
 	for _, miner := range minerPowerMap.MinerPowerMap {
-		winner := MinerPowerItem{
+		winner := &MinerPowerItem{
 			Address: miner.Address,
 			Power:   miner.Power,
 		}
@@ -1091,19 +1088,12 @@ func updateMinerPowerMap(native *native.NativeService, contract common.Address, 
 		return false
 	})
 
-	winnerAddress := []common.Address{}
-	for _, winner := range winners {
-		address := winner.Address
-		winnerAddress = append(winnerAddress, address)
-		log.Debugf("updateMinerPowerMap for view: %d, miner %s get: total %d power\n", view, winner.Address, winner.Power)
-	}
-
 	err = putMinerPowerMap(native, contract, minerPowerMap)
 	if err != nil {
-		return []common.Address{}, fmt.Errorf("putConsVoteMap error: %v", err)
+		return []*MinerPowerItem{}, fmt.Errorf("putConsVoteMap error: %v", err)
 	}
 
-	return winnerAddress, nil
+	return winners, nil
 }
 
 func GetMinerPowerMap(native *native.NativeService, contract common.Address) (*MinerPowerMap, error) {

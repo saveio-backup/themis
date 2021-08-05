@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/big"
 	"sort"
 
 	"github.com/saveio/themis/common"
@@ -308,7 +309,8 @@ func UpdateTarget(native *native.NativeService, submitInfo *SubmitNonceParam) ([
 }
 
 //Go to next PoC mining view. Adjust target etc
-func SplitBonus(native *native.NativeService, winners []common.Address, view uint32, bonus uint64, delayed bool) error {
+func SplitBonus(native *native.NativeService, winners []*WinnerInfo, view uint32, bonus uint64, delayed bool) error {
+
 	contract := native.ContextRef.CurrentContext().ContractAddress
 
 	// transfer bonus based on globalParam
@@ -386,23 +388,30 @@ func GetEffectBonus(total uint64, delayed bool) uint64 {
 }
 
 //split bonus to multiple miners based pdp rate,need call FS contract
-func SplitBonusToMiner(native *native.NativeService, winners []common.Address, bonus uint64, delayed bool) error {
+func SplitBonusToMiner(native *native.NativeService, winners []*WinnerInfo, bonus uint64, delayed bool) error {
 	if len(winners) == 0 {
 		return nil
 	}
-	pocBonus := bonus
-	pocBonus /= uint64(len(winners))
+
+	powerSum := new(big.Int).SetUint64(0)
+	for _, winner := range winners {
+		powerSum = new(big.Int).Add(powerSum, new(big.Int).SetUint64(winner.Power))
+	}
 
 	for _, winner := range winners {
-		err := appCallTransferOnt(native, utils.GovernanceContractAddress, winner, uint64(pocBonus))
+		winnerPower := new(big.Int).Mul(new(big.Int).SetUint64(bonus), new(big.Int).SetUint64(winner.Power))
+		winnerBonus := new(big.Int).Div(winnerPower, powerSum)
+		pocBonus := winnerBonus.Uint64()
+
+		err := appCallTransferOnt(native, utils.GovernanceContractAddress, winner.Address, uint64(pocBonus))
 		if err != nil {
 			return fmt.Errorf("SplitBonusToMiner, bonus transfer error: %v", err)
 		}
 
 		if delayed {
-			log.Debugf("SplitBonusToMiner send delayed %d(10^-9) for miner:%s", pocBonus, winner.ToBase58())
+			log.Debugf("SplitBonusToMiner send delayed %d(10^-9) for miner:%s", pocBonus, winner.Address.ToBase58())
 		} else {
-			log.Debugf("SplitBonusToMiner send non-delay %d(10^-9) for miner:%s", pocBonus, winner.ToBase58())
+			log.Debugf("SplitBonusToMiner send non-delay %d(10^-9) for miner:%s", pocBonus, winner.Address.ToBase58())
 		}
 	}
 
@@ -599,22 +608,27 @@ func SettleView(native *native.NativeService) ([]byte, error) {
 	//log.Debugf("SettleView: plot size calculated for deadline %d is %d MB", submitInfo.Deadline, plotSize)
 
 	//update miner power map then record pdp winners
-	winnersAddress, err := updateMinerPowerMap(native, contract, native.Height)
+	winnersPower, err := updateMinerPowerMap(native, contract, native.Height)
 	if err != nil {
 		return utils.BYTE_FALSE, fmt.Errorf("[SettleView], updateMinerPowerMap error: %v", err)
 	}
+
 	//use fake winner if no pdp!
-	if len(winnersAddress) == 0 {
-		winnersAddress = append(winnersAddress, common.ADDRESS_EMPTY)
+	if len(winnersPower) == 0 {
+		winnersPower = append(winnersPower, &MinerPowerItem{
+			Address: common.ADDRESS_EMPTY,
+			Power:   1,
+		})
 	}
 
 	winnersInfo := &WinnersInfo{}
 	view := miningView.View + 1
-	for i, address := range winnersAddress {
+	for i, winnerPower := range winnersPower {
 		//[TODO] VoteConsPub, VoteId, VoteInfo should come from pdp?
 		winnerInfo := &WinnerInfo{
 			View:    view,
-			Address: address,
+			Address: winnerPower.Address,
+			Power:   winnerPower.Power,
 			//VoteConsPub: submitInfo.VoteConsPub,
 			//VoteId:      submitInfo.VoteId,
 			//VoteInfo:    submitInfo.VoteInfo,
@@ -639,7 +653,7 @@ func SettleView(native *native.NativeService) ([]byte, error) {
 
 	// send bonus to miner
 	bonus := GetBlockSubsidy(miningView.View)
-	err = SplitBonus(native, winnersAddress, view, bonus, false)
+	err = SplitBonus(native, winnersInfo.Winners, view, bonus, false)
 	if err != nil {
 		return utils.BYTE_FALSE, fmt.Errorf("SettleView, SplitBonus fail %s", err)
 	}
