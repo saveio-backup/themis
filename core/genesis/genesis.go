@@ -217,8 +217,12 @@ func newGoverningInit() *types.Transaction {
 		distribute = []struct {
 			addr  common.Address
 			value uint64
-		}{{nutils.GovernanceContractAddress, constants.USDT_TOTAL_SUPPLY}}
-		log.Infof("distribute %v to %v", constants.USDT_TOTAL_SUPPLY, nutils.GovernanceContractAddress)
+		}{
+			{nutils.GovernanceContractAddress, constants.USDT_TOTAL_SUPPLY - constants.USDT_FAUCEL_SUPPLY},
+			{addr, constants.USDT_FAUCEL_SUPPLY},
+		}
+		log.Infof("distribute %v to %v", constants.USDT_TOTAL_SUPPLY-constants.USDT_FAUCEL_SUPPLY, nutils.GovernanceContractAddress)
+		log.Infof("distribute %v to %v", constants.USDT_FAUCEL_SUPPLY, addr)
 	}
 
 	args := common.NewZeroCopySink(nil)

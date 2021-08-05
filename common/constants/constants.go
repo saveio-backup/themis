@@ -26,10 +26,11 @@ var (
 
 // usdt constants
 const (
-	USDT_NAME         = "USD Token"
-	USDT_SYMBOL       = "USDT"
-	USDT_DECIMALS     = 9
-	USDT_TOTAL_SUPPLY = uint64(100000000000000000)
+	USDT_NAME          = "USD Token"
+	USDT_SYMBOL        = "USDT"
+	USDT_DECIMALS      = 9
+	USDT_TOTAL_SUPPLY  = uint64(100000000000000000)
+	USDT_FAUCEL_SUPPLY = uint64(10000000000000000)
 )
 
 // ont/ong unbound model constants
