@@ -970,6 +970,11 @@ func putDefConsNodes(native *native.NativeService, contract common.Address, node
 	return nil
 }
 
+func getSectorProofPeriod() uint32 {
+	//Number of view of sector proof period for plot file
+	return uint32(fs.DEFAULT_PROVE_PERIOD) / NUM_BLOCK_PER_VIEW
+}
+
 //query pdp winner from FS
 func updateMinerPowerMap(native *native.NativeService, contract common.Address, height uint32) ([]*MinerPowerItem, error) {
 	miningView, err := GetMiningView(native, contract)
@@ -1022,13 +1027,13 @@ func updateMinerPowerMap(native *native.NativeService, contract common.Address, 
 		}
 	}
 
-	//[TODO] Need use same period with sector proof period for plot file
 	//reduce pdp in expired view
-	if int64(view)-NUM_VIEW_PER_DAY <= 0 {
+	sectorProofPeriod := getSectorProofPeriod()
+	if view <= sectorProofPeriod {
 		first = native.Height
 		last = native.Height
 	} else {
-		last = native.Height - view*NUM_VIEW_PER_DAY*NUM_BLOCK_PER_VIEW
+		last = native.Height - sectorProofPeriod*NUM_BLOCK_PER_VIEW
 		first = last - NUM_BLOCK_PER_VIEW + 1
 	}
 
