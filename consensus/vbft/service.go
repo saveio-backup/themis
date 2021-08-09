@@ -2605,9 +2605,7 @@ func (self *Server) restartSyncing() {
 func (self *Server) makePoCTx(check bool, h uint32) (*types.Transaction, *gover.SubmitNonceParam, error) {
 	var param *gover.SubmitNonceParam
 
-	height := ledger.DefLedger.GetCurrentBlockHeight()
-
-	height += 1
+	height := self.GetCurrentBlockNo()
 	if check {
 		height = h
 	}
