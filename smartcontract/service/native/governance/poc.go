@@ -31,6 +31,8 @@ import (
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
 
+var NUM_BLOCK_PER_VIEW = uint32(120)
+
 const (
 	//function name
 	INIT_POC_CONFIG   = "initPoCConfig"
@@ -58,8 +60,6 @@ const (
 	HALVING_INTERVAL = 200000
 	BONUS_BASE       = 250
 	COIN             = 1000000000
-
-	NUM_BLOCK_PER_VIEW = 120
 
 	NUM_VIEW_PER_PERIOD        = 4032
 	NUM_VIEW_PER_VERIFY_PERIOD = 3024

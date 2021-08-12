@@ -34,6 +34,7 @@ import (
 	"github.com/saveio/themis/p2pserver"
 	netreqactor "github.com/saveio/themis/p2pserver/actor/req"
 	p2p "github.com/saveio/themis/p2pserver/net/protocol"
+	"github.com/saveio/themis/smartcontract/service/native/governance"
 	"github.com/saveio/themis/txnpool"
 	tc "github.com/saveio/themis/txnpool/common"
 	"github.com/saveio/themis/txnpool/proc"
@@ -122,6 +123,13 @@ func InitConfig(ctx *cli.Context) (*config.ThemisConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	blockPerView := ctx.GlobalInt(utils.GetFlagName(utils.PocBlockPerViewFlag))
+	if blockPerView > 0 {
+		governance.NUM_BLOCK_PER_VIEW = uint32(blockPerView)
+		log.Infof("poc block per view %v", governance.NUM_BLOCK_PER_VIEW)
+	}
+
 	log.Infof("Config init success")
 	return cfg, nil
 }

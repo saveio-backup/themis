@@ -108,6 +108,10 @@ var (
 		Name:  "plot-dir",
 		Usage: "Plots file dir `<path>`",
 	}
+	PocBlockPerViewFlag = cli.IntFlag{
+		Name:  "poc-block-per-view",
+		Usage: "Poc block per view",
+	}
 
 	//Test Mode setting
 	EnableTestModeFlag = cli.BoolFlag{

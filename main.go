@@ -66,7 +66,7 @@ func setupAPP() *cli.App {
 		utils.EnableConsensusFlag,
 		utils.MaxTxInBlockFlag,
 		//poc setting
-		utils.PlotDirFlag,
+		utils.PocBlockPerViewFlag,
 		//txpool setting
 		utils.GasPriceFlag,
 		utils.GasLimitFlag,

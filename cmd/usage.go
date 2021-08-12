@@ -135,7 +135,7 @@ var AppHelpFlagGroups = []flagGroup{
 	{
 		Name: "POC",
 		Flags: []cli.Flag{
-			utils.PlotDirFlag,
+			utils.PocBlockPerViewFlag,
 		},
 	},
 	{
