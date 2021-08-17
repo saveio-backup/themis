@@ -35,7 +35,7 @@ type PocProve struct {
 }
 
 func (p *PocProve) Serialization(sink *common.ZeroCopySink) {
-	sink.WriteAddress(p.Miner)
+	utils.EncodeAddress(sink, p.Miner)
 	sink.WriteUint32(p.Height)
 	sink.WriteUint64(p.PlotSize)
 }
