@@ -286,11 +286,30 @@ func (this *ConsVoteItem) Serialize(w io.Writer) error {
 	if err := serialization.WriteUint32(w, uint32(len(this.VoterMap))); err != nil {
 		return fmt.Errorf("serialization.WriteUint32, serialize NumVotes error: %v", err)
 	}
-	for address, v := range this.VoterMap {
-		if err := address.Serialize(w); err != nil {
+
+	type Voter struct {
+		Address common.Address
+		NumVotes   uint32
+	}
+
+	voters := []*Voter{}
+	for address, numVotes := range this.VoterMap {
+		voter := &Voter{
+			Address: address,
+			NumVotes:   numVotes,
+		}
+		voters = append(voters, voter)
+	}
+
+	sort.SliceStable(voters, func(i, j int) bool {
+			return voters[i].Address.ToBase58() > voters[j].Address.ToBase58()
+	})
+
+	for _, v := range voters {
+		if err := v.Address.Serialize(w); err != nil {
 			return fmt.Errorf("address.Serialize, serialize address error: %v", err)
 		}
-		if err := serialization.WriteUint32(w, v); err != nil {
+		if err := serialization.WriteUint32(w, v.NumVotes); err != nil {
 			return fmt.Errorf("serialization.WriteUint32, serialize num votes error: %v", err)
 		}
 	}
@@ -343,7 +362,14 @@ func (this *ConsVoteMap) Serialize(w io.Writer) error {
 		return fmt.Errorf("serialization.WriteUint32, serialize ConsVoteMap length error: %v", err)
 	}
 
-	for _, v := range this.ConsVoteMap {
+	var consVoteItemList []*ConsVoteItem
+	for _, v := range this.ConsVoteMap{
+		consVoteItemList = append(consVoteItemList, v)
+	}
+	sort.SliceStable(consVoteItemList, func(i, j int) bool {
+			return consVoteItemList[i].PeerPubkey > consVoteItemList[j].PeerPubkey
+	})
+	for _, v := range consVoteItemList {
 		if err := v.Serialize(w); err != nil {
 			return fmt.Errorf("serialize consVoteMap error: %v", err)
 		}
@@ -378,7 +404,17 @@ func (this *ConsVoteDetail) Serialize(w io.Writer) error {
 		return fmt.Errorf("serialization.WriteUint32, serialize ConsVoteDetail length error: %v", err)
 	}
 
+	var votees []string
+
 	for pubkey, _ := range this.ConsVoteDetail {
+		votees = append(votees, pubkey)
+	}
+
+	sort.SliceStable(votees, func(i, j int) bool {
+			return votees[i] > votees[j]
+	})
+
+	for _, pubkey := range votees {
 		if err := serialization.WriteString(w, pubkey); err != nil {
 			return fmt.Errorf("serialization.WriteString, serialize votee pubkey error: %v", err)
 		}
@@ -414,7 +450,17 @@ func (this *ConsGroupItems) Serialize(w io.Writer) error {
 		return fmt.Errorf("serialization.WriteUint32, serialize ConsGroupItems length error: %v", err)
 	}
 
-	for k, _ := range this.ConsGroupItems {
+	var items []string
+
+	for pubkey, _ := range this.ConsGroupItems {
+		items = append(items, pubkey)
+	}
+
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i] > items[j]
+	})
+
+	for _, k := range items {
 		if err := serialization.WriteString(w, k); err != nil {
 			return fmt.Errorf("serialization.WriteString, serialize peerPubkey error: %v", err)
 		}
@@ -545,7 +591,26 @@ func (this *MinerPowerMap) Serialize(w io.Writer) error {
 		return fmt.Errorf("serialization.WriteUint32, serialize ConsVoteMap length error: %v", err)
 	}
 
-	for _, v := range this.MinerPowerMap {
+	winners := []*MinerPowerItem{}
+	for _, miner := range this.MinerPowerMap {
+		winner := &MinerPowerItem{
+			Address: miner.Address,
+			Power:   miner.Power,
+		}
+		winners = append(winners, winner)
+	}
+
+	// sort winner by power
+	sort.SliceStable(winners, func(i, j int) bool {
+		if winners[i].Power > winners[j].Power {
+			return true
+		} else {
+			return winners[i].Address.ToBase58() > winners[j].Address.ToBase58()
+		}
+		return false
+	})
+
+	for _, v := range winners {
 		if err := v.Serialize(w); err != nil {
 			return fmt.Errorf("serialize consVoteMap error: %v", err)
 		}
