@@ -604,7 +604,7 @@ func (this *MinerPowerMap) Serialize(w io.Writer) error {
 	sort.SliceStable(winners, func(i, j int) bool {
 		if winners[i].Power > winners[j].Power {
 			return true
-		} else {
+		} else if winners[i].Power == winners[j].Power {
 			return winners[i].Address.ToBase58() > winners[j].Address.ToBase58()
 		}
 		return false

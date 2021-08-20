@@ -1087,7 +1087,7 @@ func updateMinerPowerMap(native *native.NativeService, contract common.Address, 
 	sort.SliceStable(winners, func(i, j int) bool {
 		if winners[i].Power > winners[j].Power {
 			return true
-		} else {
+		} else if if winners[i].Power == winners[j].Power {
 			return winners[i].Address.ToBase58() > winners[j].Address.ToBase58()
 		}
 		return false
