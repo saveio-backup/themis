@@ -228,6 +228,13 @@ func (this *WinnerInfo) Deserialize(r io.Reader) error {
 		}
 		this.VoteId = append(this.VoteId, uint32(value))
 	}
+
+	voteInfo, err := serialization.ReadVarBytes(r)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadVarBytes, deserialize VoteInfo error: %v", err)
+	}
+	this.VoteInfo = voteInfo
+
 	return nil
 }
 
