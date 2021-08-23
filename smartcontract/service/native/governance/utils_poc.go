@@ -1015,12 +1015,23 @@ func updateMinerPowerMap(native *native.NativeService, contract common.Address, 
 			}
 
 			log.Debugf("updateMinerPowerMap for height: %d, get: pdp record for %d miner\n", curHeight, len(prove.Proves))
+			seen := make(map[common.Address]*fs.PocProve)
 			for _, proof := range prove.Proves {
 				log.Debugf("updateMinerPowerMap for height: %d, miner %s get: %d power\n", curHeight, proof.Miner.ToBase58(), proof.PlotSize)
+				if _, ok := seen[proof.Miner]; !ok {
+					seen[proof.Miner] = &fs.PocProve{Miner: proof.Miner}
+				}
+				//fs sort pdpProve by accumulated pdp, just use biggest power for same miner.
+				seen[proof.Miner].PlotSize = proof.PlotSize
+			}
+
+			for _, proof := range seen {
 				if _, ok := minerPowerMap.MinerPowerMap[proof.Miner]; !ok {
 					minerPowerMap.MinerPowerMap[proof.Miner] = &MinerPowerItem{Address: proof.Miner}
 				}
+
 				minerPowerMap.MinerPowerMap[proof.Miner].Power += proof.PlotSize
+				log.Debugf("updateMinerPowerMap for height: %d, miner %s increase: %d power, total %d power\n", curHeight, proof.Miner.ToBase58(), proof.PlotSize,minerPowerMap.MinerPowerMap[proof.Miner].Power)
 			}
 		} else {
 			return []*MinerPowerItem{}, errors.New(string(retInfo.Info))
@@ -1057,16 +1068,27 @@ func updateMinerPowerMap(native *native.NativeService, contract common.Address, 
 			}
 
 			log.Debugf("updateMinerPowerMap for height: %d, get: pdp record for %d miner\n", curHeight, len(prove.Proves))
+			seen := make(map[common.Address]*fs.PocProve)
 			for _, proof := range prove.Proves {
 				log.Debugf("updateMinerPowerMap for height: %d, miner %s get: %d power\n", curHeight, proof.Miner.ToBase58(), proof.PlotSize)
+				if _, ok := seen[proof.Miner]; !ok {
+					seen[proof.Miner] = &fs.PocProve{Miner: proof.Miner}
+				}
+				//fs sort pdpProve by accumulated pdp, just use biggest power for same miner.
+				seen[proof.Miner].PlotSize = proof.PlotSize
+			}
+
+			for _, proof := range seen {
 				if _, ok := minerPowerMap.MinerPowerMap[proof.Miner]; !ok {
 					continue
 				}
 
 				if minerPowerMap.MinerPowerMap[proof.Miner].Power <= proof.PlotSize {
 					delete(minerPowerMap.MinerPowerMap, proof.Miner)
+					log.Debugf("updateMinerPowerMap for height: %d, miner %s decrease: %d power, total 0 power\n", curHeight, proof.Miner.ToBase58(), minerPowerMap.MinerPowerMap[proof.Miner].Power)
 				} else {
 					minerPowerMap.MinerPowerMap[proof.Miner].Power -= proof.PlotSize
+					log.Debugf("updateMinerPowerMap for height: %d, miner %s decrease: %d power, total %d power\n", curHeight, proof.Miner.ToBase58(), proof.PlotSize,minerPowerMap.MinerPowerMap[proof.Miner].Power)
 				}
 			}
 		} else {
