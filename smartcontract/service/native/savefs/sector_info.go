@@ -474,15 +474,17 @@ func deleteSectorInfo(native *native.NativeService, nodeAddr common.Address, sec
 
 // delete sector info and all sector info groups
 func deleteSector(native *native.NativeService, nodeAddr common.Address, sectorID uint64) error {
-	err := deleteSectorInfo(native, nodeAddr, sectorID)
+
+	err := deleteAllSectorFileInfoGroup(native, nodeAddr, sectorID)
+	if err != nil {
+		return errors.NewErr("deleteAllSectorFileInfoGroup error!")
+	}
+
+	err = deleteSectorInfo(native, nodeAddr, sectorID)
 	if err != nil {
 		return errors.NewErr("deleteSectorInfo error!")
 	}
 
-	err = deleteAllSectorFileInfoGroup(native, nodeAddr, sectorID)
-	if err != nil {
-		return errors.NewErr("deleteAllSectorFileInfoGroup error!")
-	}
 	return nil
 }
 
