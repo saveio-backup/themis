@@ -54,6 +54,11 @@ const (
 	CONS_VOTE_REVENUE                 = "consVoteRevenue"
 	DEFAULT_CONS_NODE                 = "defaultConsNodes"
 	MINER_POWER_MAP                   = "minerPowerMap"
+	DELAYED_BONUS_MAP_PATTERN         = "DelayedBonusMap%s=%d"
+	DELAYED_BONUS_FUNDATION           = "fundation"
+	DELAYED_BONUS_MINERS              = "miners"
+	DELAYED_BONUS_CONS                = "consNode"
+	DELAYED_BONUS_CAND                = "candNode"
 
 	DIFF_ADJUST_CHANGE_BLOCK = 2700
 
@@ -300,9 +305,9 @@ func UpdateTarget(native *native.NativeService, submitInfo *SubmitNonceParam) ([
 	}
 
 	// transfer delayed bonus
-	err = transferDelayedBonus(native, view)
+	err = transferBatchDelayedBonus(native, view)
 	if err != nil {
-		return utils.BYTE_FALSE, fmt.Errorf("UpdateTarget, transferDelayedBonus error: %v", err)
+		return utils.BYTE_FALSE, fmt.Errorf("UpdateTarget, transferBatchDelayedBonus error: %v", err)
 	}
 
 	return utils.BYTE_TRUE, nil
@@ -338,7 +343,7 @@ func SplitBonus(native *native.NativeService, winners []*WinnerInfo, view uint32
 	} else {
 		log.Debugf("SplitBonus send non-delay %d(10^-9) of total %d(10^-9) of view %d to fundation", realFundBonus, fundBonus, view)
 	}
-	SplitBonusToFundation(native, contract, realFundBonus, delayed)
+	SplitBonusToFundation(native, contract, fundBonus)
 
 	//split bonus to miner
 	pocBonus := bonus * uint64(pocPercent) / 100
@@ -350,7 +355,7 @@ func SplitBonus(native *native.NativeService, winners []*WinnerInfo, view uint32
 	} else {
 		log.Debugf("SplitBonus send non-delay %d(10^-9) of total %d(10^-9) of view %d to miner", realWinnerBonus, winnerBonus, view)
 	}
-	SplitBonusToMiner(native, winners, realWinnerBonus, delayed)
+	SplitBonusToMiner(native, contract, winners, winnerBonus)
 
 	//split bonus to cons nodes
 	consBonus := pocBonus * uint64(globalParam.Cons) / 100
@@ -361,7 +366,7 @@ func SplitBonus(native *native.NativeService, winners []*WinnerInfo, view uint32
 	} else {
 		log.Debugf("SplitBonus send non-delay %d(10^-9) of total %d(10^-9) of view %d to cons nodes", realConsBonus, consBonus, view)
 	}
-	SplitBonusToConsensusNodes(native, contract, view, realConsBonus, delayed)
+	SplitBonusToConsensusNodes(native, contract, view, consBonus)
 
 	//sip and cons vote share vote bonus
 	if !delayed {
@@ -388,10 +393,14 @@ func GetEffectBonus(total uint64, delayed bool) uint64 {
 }
 
 //split bonus to multiple miners based pdp rate,need call FS contract
-func SplitBonusToMiner(native *native.NativeService, winners []*WinnerInfo, bonus uint64, delayed bool) error {
+func SplitBonusToMiner(native *native.NativeService, contract common.Address, winners []*WinnerInfo, total uint64) error {
 	if len(winners) == 0 {
 		return nil
 	}
+
+	totalDelayed := GetTotalDelayedBonus(total)
+	nonDelayed := total - totalDelayed
+	items := []*DelayedBonusItem{}
 
 	powerSum := new(big.Int).SetUint64(0)
 	for _, winner := range winners {
@@ -399,7 +408,7 @@ func SplitBonusToMiner(native *native.NativeService, winners []*WinnerInfo, bonu
 	}
 
 	for _, winner := range winners {
-		winnerPower := new(big.Int).Mul(new(big.Int).SetUint64(bonus), new(big.Int).SetUint64(winner.Power))
+		winnerPower := new(big.Int).Mul(new(big.Int).SetUint64(nonDelayed), new(big.Int).SetUint64(winner.Power))
 		winnerBonus := new(big.Int).Div(winnerPower, powerSum)
 		pocBonus := winnerBonus.Uint64()
 
@@ -407,18 +416,27 @@ func SplitBonusToMiner(native *native.NativeService, winners []*WinnerInfo, bonu
 		if err != nil {
 			return fmt.Errorf("SplitBonusToMiner, bonus transfer error: %v", err)
 		}
+		log.Debugf("SplitBonusToMiner send non-delay %d(10^-9) for miner:%s", pocBonus, winner.Address.ToBase58())
 
-		if delayed {
-			log.Debugf("SplitBonusToMiner send delayed %d(10^-9) for miner:%s", pocBonus, winner.Address.ToBase58())
-		} else {
-			log.Debugf("SplitBonusToMiner send non-delay %d(10^-9) for miner:%s", pocBonus, winner.Address.ToBase58())
-		}
+		winnerPower = new(big.Int).Mul(new(big.Int).SetUint64(totalDelayed), new(big.Int).SetUint64(winner.Power))
+		winnerBonus = new(big.Int).Div(winnerPower, powerSum)
+		pocBonus = winnerBonus.Uint64()
+
+		items = append(items, &DelayedBonusItem{
+			Address: winner.Address,
+			Bonus:   pocBonus,
+		})
+	}
+
+	err := updateDelayedBonusMap(native, contract, DELAYED_BONUS_MINERS, items)
+	if err != nil {
+		return fmt.Errorf("SplitBonusToMiner, updateDelayedBonusMap error: %v", err)
 	}
 
 	return nil
 }
 
-func SplitBonusToFundation(native *native.NativeService, contract common.Address, bonus uint64, delayed bool) error {
+func SplitBonusToFundation(native *native.NativeService, contract common.Address, total uint64) error {
 	// transfer bonus based on globalParam
 	globalParam, err := getGlobalParam(native, contract)
 	if err != nil {
@@ -427,19 +445,30 @@ func SplitBonusToFundation(native *native.NativeService, contract common.Address
 
 	fundAddr, err := common.AddressFromBase58(globalParam.FundWalletAddr)
 
-	if delayed {
-		log.Debugf("SplitBonusToFundation send delayed %d(10^-9) for fundation:%s", bonus, globalParam.FundWalletAddr)
-	} else {
-		log.Debugf("SplitBonusToFundation send non-delay %d(10^-9) for fundation:%s", bonus, globalParam.FundWalletAddr)
-	}
-	err = appCallTransferOnt(native, utils.GovernanceContractAddress, fundAddr, uint64(bonus))
+	totalDelayed := GetTotalDelayedBonus(total)
+	nonDelayed := total - totalDelayed
+
+	log.Debugf("SplitBonusToFundation send non-delay %d(10^-9) for fundation:%s", nonDelayed, globalParam.FundWalletAddr)
+	err = appCallTransferOnt(native, utils.GovernanceContractAddress, fundAddr, uint64(nonDelayed))
 	if err != nil {
 		return fmt.Errorf("SplitBonusToFundation, bonus transfer error: %v", err)
 	}
+
+	items := []*DelayedBonusItem{}
+	items = append(items, &DelayedBonusItem{
+			Address: fundAddr,
+			Bonus:   totalDelayed,
+	})
+
+	err = updateDelayedBonusMap(native, contract, DELAYED_BONUS_FUNDATION, items)
+	if err != nil {
+		return fmt.Errorf("SplitBonusToFundation, updateMinerPowerMap error: %v", err)
+	}
+
 	return nil
 }
 
-func SplitBonusToConsensusNodes(native *native.NativeService, contract common.Address, view uint32, bonus uint64, delayed bool) error {
+func SplitBonusToConsensusNodes(native *native.NativeService, contract common.Address, view uint32, total uint64) error {
 	// get config
 	config, err := getConfig(native, contract)
 	if err != nil {
@@ -457,7 +486,9 @@ func SplitBonusToConsensusNodes(native *native.NativeService, contract common.Ad
 	if err != nil {
 		return fmt.Errorf("getGlobalParam, getGlobalParam error: %v", err)
 	}
-	balance := bonus
+
+	totalDelayed := GetTotalDelayedBonus(total)
+	totalNonDelayed := total - totalDelayed
 
 	peersCandidate := []*CandidateSplitInfo{}
 
@@ -515,21 +546,27 @@ func SplitBonusToConsensusNodes(native *native.NativeService, contract common.Ad
 		return fmt.Errorf("SplitBonusToConsensusNodes, sumS is 0")
 	}
 
+	items := []*DelayedBonusItem{}
 	//fee split of consensus peer
 	for i := 0; i < int(config.K); i++ {
-		nodeAmount := balance * uint64(globalParam.A2) / 100 * peersCandidate[i].S / sumS
+		nodeAmount := totalNonDelayed * uint64(globalParam.A2) / 100 * peersCandidate[i].S / sumS
 		address := peersCandidate[i].Address
 
-		if delayed {
-			log.Debugf("SplitBonusToConsensusNodes send delayed %d(10^-9) bonus for cons node:%s", nodeAmount, address.ToBase58())
-		} else {
-			log.Debugf("SplitBonusToConsensusNodes send non-delay %d(10^-9) bonus for cons node:%s", nodeAmount, address.ToBase58())
-		}
-
+		log.Debugf("SplitBonusToConsensusNodes send non-delay %d(10^-9) bonus for cons node:%s", nodeAmount, address.ToBase58())
 		err = appCallTransferOnt(native, utils.GovernanceContractAddress, address, nodeAmount)
 		if err != nil {
 			return fmt.Errorf("SplitBonusToConsensusNodes, bonus transfer error: %v", err)
 		}
+
+		nodeAmount = totalDelayed * uint64(globalParam.A2) / 100 * peersCandidate[i].S / sumS
+		items = append(items, &DelayedBonusItem{
+			Address: address,
+			Bonus:   nodeAmount,
+		})
+	}
+	err = updateDelayedBonusMap(native, contract, DELAYED_BONUS_CONS, items)
+	if err != nil {
+		return fmt.Errorf("SplitBonusToConsensusNodes, updateDelayedBonusMap error: %v", err)
 	}
 
 	//fee split of candidate peer
@@ -541,22 +578,28 @@ func SplitBonusToConsensusNodes(native *native.NativeService, contract common.Ad
 	if sum == 0 {
 		return nil
 	}
+
+	items = []*DelayedBonusItem{}
 	for i := int(config.K); i < len(peersCandidate); i++ {
-		nodeAmount := balance * uint64(globalParam.B2) / 100 * peersCandidate[i].Stake / sum
+		nodeAmount := totalNonDelayed * uint64(globalParam.B2) / 100 * peersCandidate[i].Stake / sum
 		address := peersCandidate[i].Address
 
-		if delayed {
-			log.Debugf("SplitBonusToConsensusNodes send delayed %d(10^-9) bonus for cons node:%s", nodeAmount, address.ToBase58())
-		} else {
-			log.Debugf("SplitBonusToConsensusNodes send non-delay %d(10^-9) bonus for cons node:%s", nodeAmount, address.ToBase58())
-		}
-
+		log.Debugf("SplitBonusToConsensusNodes send non-delay %d(10^-9) bonus for cand node:%s", nodeAmount, address.ToBase58())
 		err = appCallTransferOnt(native, utils.GovernanceContractAddress, address, nodeAmount)
 		if err != nil {
 			return fmt.Errorf("SplitBonusToConsensusNodes, bonus transfer error: %v", err)
 		}
-	}
 
+		nodeAmount = totalDelayed * uint64(globalParam.B2) / 100 * peersCandidate[i].Stake / sum
+		items = append(items, &DelayedBonusItem{
+			Address: address,
+			Bonus:   nodeAmount,
+		})
+	}
+	err = updateDelayedBonusMap(native, contract, DELAYED_BONUS_CAND, items)
+	if err != nil {
+		return fmt.Errorf("SplitBonusToConsensusNodes, updateDelayedBonusMap error: %v", err)
+	}
 	return nil
 }
 

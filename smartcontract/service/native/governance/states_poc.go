@@ -641,3 +641,82 @@ func (this *MinerPowerMap) Deserialize(r io.Reader) error {
 	this.MinerPowerMap = minerPowerMap
 	return nil
 }
+
+type DelayedBonusItem struct {
+	Address common.Address
+	Bonus   uint64
+}
+
+func (this *DelayedBonusItem) Serialize(w io.Writer) error {
+	if err := serialization.WriteVarBytes(w, this.Address[:]); err != nil {
+		return fmt.Errorf("serialization.WriteVarBytes, address error: %v", err)
+	}
+	if err := serialization.WriteUint64(w, this.Bonus); err != nil {
+		return fmt.Errorf("serialization.WriteUint32, serialize bonus error: %v", err)
+	}
+
+	return nil
+}
+
+func (this *DelayedBonusItem) Deserialize(r io.Reader) error {
+	address, err := utils.ReadAddress(r)
+	if err != nil {
+		return fmt.Errorf("utils.ReadAddress, deserialize address error: %v", err)
+	}
+	bonus, err := serialization.ReadUint64(r)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadUint32, deserialize bonus error: %v", err)
+	}
+
+	this.Address = address
+	this.Bonus = bonus
+
+	return nil
+}
+
+type DelayedBonusMap struct {
+	DelayedBonusMap map[common.Address]*DelayedBonusItem
+}
+
+func (this *DelayedBonusMap) Serialize(w io.Writer) error {
+	if err := serialization.WriteUint32(w, uint32(len(this.DelayedBonusMap))); err != nil {
+		return fmt.Errorf("serialization.WriteUint32, serialize DelayedBonusMap length error: %v", err)
+	}
+
+	items := []*DelayedBonusItem{}
+	for _, miner := range this.DelayedBonusMap {
+		item := &DelayedBonusItem{
+			Address: miner.Address,
+			Bonus:   miner.Bonus,
+		}
+		items = append(items, item)
+	}
+
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].Address.ToBase58() > items[j].Address.ToBase58()
+	})
+
+	for _, v := range items {
+		if err := v.Serialize(w); err != nil {
+			return fmt.Errorf("serialize DelayedBonusItem error: %v", err)
+		}
+	}
+	return nil
+}
+
+func (this *DelayedBonusMap) Deserialize(r io.Reader) error {
+	n, err := serialization.ReadUint32(r)
+	if err != nil {
+		return fmt.Errorf("serialization.ReadUint32, deserialize DelayedBonusMap length error: %v", err)
+	}
+	delayedBonusMap := make(map[common.Address]*DelayedBonusItem)
+	for i := 0; uint32(i) < n; i++ {
+		delayedBonusItem := new(DelayedBonusItem)
+		if err := delayedBonusItem.Deserialize(r); err != nil {
+			return fmt.Errorf("deserialize DelayedBonusItem error: %v", err)
+		}
+		delayedBonusMap[delayedBonusItem.Address] = delayedBonusItem
+	}
+	this.DelayedBonusMap = delayedBonusMap
+	return nil
+}

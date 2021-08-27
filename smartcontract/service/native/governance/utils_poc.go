@@ -346,6 +346,99 @@ func transferDelayedBonus(native *native.NativeService, view uint32) error {
 	return nil
 }
 
+func calBatchDelayedBonusForRole(native *native.NativeService, role string, day uint32, totalMap *DelayedBonusMap) error {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	delayedBonusMap, err := getDelayedBonusMap(native, contract, role, day)
+	if err != nil {
+		return fmt.Errorf("updateDelayedBonusMap, get %s delayedBonusMap error: %v", role, err)
+	}
+
+	items := []*DelayedBonusItem{}
+	for _, item := range delayedBonusMap.DelayedBonusMap {
+		items = append(items, &DelayedBonusItem{
+			Address: item.Address,
+			Bonus:   item.Bonus,
+		})
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].Address.ToBase58() > items[j].Address.ToBase58()
+	})
+
+	for _, item := range items {
+		effectiveBonus := item.Bonus/NUM_DAY_DELAYED
+		if _, ok := totalMap.DelayedBonusMap[item.Address]; !ok {
+			totalMap.DelayedBonusMap[item.Address] = &DelayedBonusItem{Address: item.Address, Bonus: 0}
+		}
+		newTotal := totalMap.DelayedBonusMap[item.Address].Bonus + effectiveBonus
+		totalMap.DelayedBonusMap[item.Address].Bonus = newTotal
+		log.Debugf("calBatchDelayedBonusForRole will send delayed %d(10^-9) for %s %s for day %d, total plan %d", effectiveBonus, role, item.Address.ToBase58(), day, newTotal)
+	}
+
+	return nil
+}
+
+func transferBatchDelayedBonusForRole(native *native.NativeService, role string, totalMap *DelayedBonusMap) error {
+	items := []*DelayedBonusItem{}
+	for _, item := range totalMap.DelayedBonusMap {
+		items = append(items, item)
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].Address.ToBase58() > items[j].Address.ToBase58()
+	})
+	for _, item := range items {
+		err := appCallTransferOnt(native, utils.GovernanceContractAddress, item.Address, uint64(item.Bonus))
+		if err != nil {
+			return fmt.Errorf("transferBatchDelayedBonusForRole, bonus transfer error: %v", err)
+		}
+		log.Debugf("transferBatchDelayedBonusForRole send delayed %d(10^-9) for %s %s", item.Bonus, role, item.Address.ToBase58())
+	}
+
+	return nil
+}
+
+func transferBatchDelayedBonus(native *native.NativeService, view uint32) error {
+	if !IsLastViewOfDay(view) {
+		return nil
+	}
+
+	//go through delayed bonus of last 90 days!
+	curDay := (view - 1)/NUM_VIEW_PER_DAY + 1
+	first := int64(curDay) - NUM_DAY_DELAYED
+	if first <= 0 {
+		first = 1
+	}
+	last := curDay
+
+	fundBonusMap := &DelayedBonusMap{DelayedBonusMap: make(map[common.Address]*DelayedBonusItem)}
+	minerBonusMap := &DelayedBonusMap{DelayedBonusMap: make(map[common.Address]*DelayedBonusItem)}
+	consBonusMap := &DelayedBonusMap{DelayedBonusMap: make(map[common.Address]*DelayedBonusItem)}
+	candBonusMap := &DelayedBonusMap{DelayedBonusMap: make(map[common.Address]*DelayedBonusItem)}
+	for day := uint32(first); day < uint32(last); day++ {
+		log.Debugf("transferBatchDelayedBonus calulate delayed bonus for day %d", day)
+		calBatchDelayedBonusForRole(native, DELAYED_BONUS_FUNDATION, day, fundBonusMap)
+		calBatchDelayedBonusForRole(native, DELAYED_BONUS_MINERS, day, minerBonusMap)
+		calBatchDelayedBonusForRole(native, DELAYED_BONUS_CONS, day, consBonusMap)
+		calBatchDelayedBonusForRole(native, DELAYED_BONUS_CAND, day, candBonusMap)
+	}
+
+	if uint32(first) < uint32(last) {
+		log.Debugf("transferBatchDelayedBonus send delayed bonus for %s from day %d to day %d", DELAYED_BONUS_FUNDATION, first, last-1)
+		transferBatchDelayedBonusForRole(native, DELAYED_BONUS_FUNDATION, fundBonusMap)
+
+		log.Debugf("transferBatchDelayedBonus send delayed bonus for %s from day %d to day %d", DELAYED_BONUS_MINERS, first, last-1)
+		transferBatchDelayedBonusForRole(native, DELAYED_BONUS_MINERS, minerBonusMap)
+
+		log.Debugf("transferBatchDelayedBonus send delayed bonus for %s from day %d to day %d", DELAYED_BONUS_CONS, first, last-1)
+		transferBatchDelayedBonusForRole(native, DELAYED_BONUS_CONS, consBonusMap)
+
+		log.Debugf("transferBatchDelayedBonus send delayed bonus for %s from day %d to day %d", DELAYED_BONUS_CAND, first, last-1)
+		transferBatchDelayedBonusForRole(native, DELAYED_BONUS_CAND, candBonusMap)
+	}
+
+	return nil
+}
+
 //consensus vote info
 func GetConsVoteMap(native *native.NativeService, contract common.Address, view uint32) (*ConsVoteMap, error) {
 	consVoteMap := &ConsVoteMap{
@@ -1154,5 +1247,77 @@ func putMinerPowerMap(native *native.NativeService, contract common.Address, min
 	}
 
 	native.CacheDB.Put(utils.ConcatKey(contract, []byte(MINER_POWER_MAP)), cstates.GenRawStorageItem(bf.Bytes()))
+	return nil
+}
+
+//DelayedBonusMap
+func updateDelayedBonusMap(native *native.NativeService, contract common.Address, role string, items[]*DelayedBonusItem) error {
+	miningView, err := GetMiningView(native, contract)
+	if err != nil {
+		return fmt.Errorf("updateDelayedBonusMap, get view error: %v", err)
+	}
+
+	view := miningView.View + 1
+	day := (view -1)/NUM_VIEW_PER_DAY + 1
+	delayedBonusMap, err := getDelayedBonusMap(native, contract, role, day)
+	if err != nil {
+		return fmt.Errorf("updateDelayedBonusMap, get %s delayedBonusMap error: %v", role, err)
+	}
+
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].Address.ToBase58() > items[j].Address.ToBase58()
+	})
+
+	for _, item := range items {
+		if _, ok := delayedBonusMap.DelayedBonusMap[item.Address]; !ok {
+			delayedBonusMap.DelayedBonusMap[item.Address] = &DelayedBonusItem{Address: item.Address, Bonus: 0}
+		}
+		newTotal := delayedBonusMap.DelayedBonusMap[item.Address].Bonus + item.Bonus
+		delayedBonusMap.DelayedBonusMap[item.Address].Bonus = newTotal
+		log.Debugf("updateDelayedBonusMap reserve delayed %d(10^-9) for %s %s for day %d(total delayed %d for day %d)", item.Bonus, role, item.Address.ToBase58(), day, newTotal, day)
+	}
+
+	err = putDelayedBonusMap(native, contract, role, day, delayedBonusMap)
+	if err != nil {
+		return fmt.Errorf("putDelayedBonusMap error: %v", err)
+	}
+
+	return nil
+}
+
+func GenDelayedBonusMapKey(contract common.Address, role string, day uint32) []byte {
+	str := fmt.Sprintf(DELAYED_BONUS_MAP_PATTERN, role, day)
+	key := append(contract[:], []byte(str)...)
+	return key
+}
+
+func getDelayedBonusMap(native *native.NativeService, contract common.Address, role string, day uint32) (*DelayedBonusMap, error) {
+	key := GenDelayedBonusMapKey(contract, role, day)
+	delayedBonusMapBytes, err := native.CacheDB.Get(key)
+	if err != nil {
+		return nil, fmt.Errorf("getDelayedBonusMap, get delayedBonusMapBytes error: %v", err)
+	}
+	delayedBonusMap := new(DelayedBonusMap)
+	if delayedBonusMapBytes == nil {
+		return &DelayedBonusMap{DelayedBonusMap: make(map[common.Address]*DelayedBonusItem)},nil
+	} else {
+		value, err := cstates.GetValueFromRawStorageItem(delayedBonusMapBytes)
+		if err != nil {
+			return nil, fmt.Errorf("getDelayedBonusMap, deserialize from raw storage item err:%v", err)
+		}
+		if err := delayedBonusMap.Deserialize(bytes.NewBuffer(value)); err != nil {
+			return nil, fmt.Errorf("deserialize, deserialize DelayedBonusMap error: %v", err)
+		}
+	}
+	return delayedBonusMap, nil
+}
+
+func putDelayedBonusMap(native *native.NativeService, contract common.Address, role string, day uint32, delayedBonusMap *DelayedBonusMap) error {
+	key := GenDelayedBonusMapKey(contract, role, day)
+	bf := new(bytes.Buffer)
+	if err := delayedBonusMap.Serialize(bf); err != nil {
+		return fmt.Errorf("serialize, serialize delayedBonusMap error: %v", err)
+	}
+	native.CacheDB.Put(key, cstates.GenRawStorageItem(bf.Bytes()))
 	return nil
 }
