@@ -1177,8 +1177,8 @@ func updateMinerPowerMap(native *native.NativeService, contract common.Address, 
 				}
 
 				if minerPowerMap.MinerPowerMap[proof.Miner].Power <= proof.PlotSize {
+					log.Debugf("updateMinerPowerMap for height: %d, miner %s decrease: %d power from %d power, 0 power left\n", curHeight, proof.Miner.ToBase58(), proof.PlotSize, minerPowerMap.MinerPowerMap[proof.Miner].Power)
 					delete(minerPowerMap.MinerPowerMap, proof.Miner)
-					log.Debugf("updateMinerPowerMap for height: %d, miner %s decrease: %d power, total 0 power\n", curHeight, proof.Miner.ToBase58(), minerPowerMap.MinerPowerMap[proof.Miner].Power)
 				} else {
 					minerPowerMap.MinerPowerMap[proof.Miner].Power -= proof.PlotSize
 					log.Debugf("updateMinerPowerMap for height: %d, miner %s decrease: %d power, total %d power\n", curHeight, proof.Miner.ToBase58(), proof.PlotSize,minerPowerMap.MinerPowerMap[proof.Miner].Power)
