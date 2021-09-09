@@ -296,6 +296,35 @@ func GetNodePubKey(native *native.NativeService) ([]byte, error) {
 	return bf.Bytes(), nil
 }
 
+func SetNodePubKey(native *native.NativeService) ([]byte, error) {
+	var nodePubKey NodePubKey
+
+	source := common.NewZeroCopySource(native.Input)
+	if err := nodePubKey.Deserialization(source); err != nil {
+		log.Error("[SetNodePubKey] SetNodePubKey deserialization error!")
+		return utils.BYTE_FALSE, errors.NewErr("[SetNodePubKey] SetNodePubKey deserialization error!")
+	}
+
+	if len(nodePubKey.PublicKey) != 0 {
+		walletPubKey, err := keypair.DeserializePublicKey(nodePubKey.PublicKey)
+		if err != nil {
+			log.Error("[SetNodePubKey] DeserializePublicKey error")
+			return utils.BYTE_FALSE, errors.NewErr("[SetNodePubKey] DeserializePublicKey error")
+		}
+
+		walletAddr := types.AddressFromPubKey(walletPubKey)
+		if walletAddr != nodePubKey.Participant {
+			log.Error("[SetNodePubKey] PublicKey is not match error")
+			return utils.BYTE_FALSE, errors.NewErr("[SetNodePubKey] PublicKey is not match error")
+		}
+
+		key := GenPubKeyKey(utils.MicroPayContractAddress, walletAddr)
+		utils.PutBytes(native, key, nodePubKey.PublicKey)
+	}
+
+	return utils.BYTE_TRUE, nil
+}
+
 //@notice: channelID is global monotonically increasing.
 func OpenChannel(native *native.NativeService) ([]byte, error) {
 	var openCh OpenChannelInfo

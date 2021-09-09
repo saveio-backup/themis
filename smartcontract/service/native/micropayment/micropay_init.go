@@ -28,6 +28,7 @@ func RegisterMPayContract(native *native.NativeService) {
 	native.Register(MP_GET_CHANNEL_PARTICIPANTINFO, GetChannelParticipantInfo)
 	native.Register(MP_GET_CHANNELID, GetChannelIdentifier)
 	native.Register(MP_GET_NODE_PUBKEY, GetNodePubKey)
+	native.Register(MP_SET_NODE_PUBKEY, SetNodePubKey)
 	native.Register(MP_FAST_TRANSFER, FastTransfer)
 
 }

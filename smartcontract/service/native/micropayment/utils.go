@@ -35,6 +35,7 @@ const (
 	MP_GET_CHANNEL_PARTICIPANTINFO   = "GetChannelParticipantInfo"
 	MP_GET_CHANNELID                 = "GetChannelIdentifier"
 	MP_GET_NODE_PUBKEY               = "GetNodePubKey"
+	MP_SET_NODE_PUBKEY               = "SetNodePubKey"
 	MP_FAST_TRANSFER                 = "FastTransfer"
 	//MP_SETTLEMENT_TRANSFER = "SettlementTransfer"
 )
