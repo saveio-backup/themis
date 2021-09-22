@@ -19,6 +19,7 @@
 package netserver
 
 import (
+	"encoding/json"
 	"errors"
 	"net"
 
@@ -50,7 +51,8 @@ func NewNetServer(protocol p2p.Protocol, conf *config.P2PNodeConfig, reserveAddr
 
 	listener, err := connect_controller.NewListener(uint16(nodePort), conf)
 	if err != nil {
-		log.Error("[p2p]failed to create sync listener")
+		confBuf, _ := json.Marshal(conf)
+		log.Error("[p2p]failed to create sync listener port %v conf %s err %s", nodePort, confBuf, err)
 		return nil, errors.New("[p2p]failed to create sync listener")
 	}
 
