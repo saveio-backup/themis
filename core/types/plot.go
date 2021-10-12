@@ -20,6 +20,7 @@ package types
 
 import (
 	"encoding/binary"
+
 	"github.com/saveio/themis/common"
 )
 
