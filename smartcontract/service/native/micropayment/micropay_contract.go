@@ -23,11 +23,13 @@ const (
 	BalanceProofUpdate
 	WITHDRAW
 	COOPERATIVESETTLE
+	FEEINFO
 	SIGNATURE_PREFIX                   = "\x19Ontology Signed Message:\n"
 	WITHDRAW_MESSAGE_LENGTH            = "168"
 	COSETTLE_MESSAGE_LENGTH            = "220"
 	CLOSE_MESSAGE_LENGTH               = "212"
 	BALANCEPROOF_UPDATE_MESSAGE_LENGTH = "277"
+	FEEINFO_MESSAGE_LENGTH             = "289"
 	SECRET_LENGTH                      = 32
 )
 
@@ -322,6 +324,66 @@ func SetNodePubKey(native *native.NativeService) ([]byte, error) {
 		utils.PutBytes(native, key, nodePubKey.PublicKey)
 	}
 
+	return utils.BYTE_TRUE, nil
+}
+
+func GetFeeInfo(native *native.NativeService) ([]byte, error) {
+	var feeInfo FeeInfo
+	source := common.NewZeroCopySource(native.Input)
+	err := feeInfo.Deserialization(source)
+	if err != nil {
+		log.Error("[GetFeeInfo] FeeInfo deserialization error!")
+		return utils.BYTE_FALSE, errors.NewErr("[GetFeeInfo] FeeInfo deserialization error!")
+	}
+	key := GenFeeKey(utils.MicroPayContractAddress, feeInfo.WalletAddr, feeInfo.ChannelID)
+	item, err := utils.GetStorageItem(native, key)
+	if err != nil {
+		log.Error("[GetFeeInfo] GetStorageItem error")
+		return utils.BYTE_FALSE, errors.NewErr("[GetFeeInfo] GetStorageItem error")
+	}
+	log.Debugf("GetFeeInfo for node: %v, channel: %v, err: %v\n", feeInfo.WalletAddr, feeInfo.ChannelID, err)
+	if item != nil {
+		data := new(FeeInfo)
+		source := common.NewZeroCopySource(item.Value)
+		err = data.Deserialization(source)
+		if err != nil {
+			log.Error("[GetFeeInfo] FeeInfo deserialize error!")
+			return utils.BYTE_FALSE, errors.NewErr("[GetFeeInfo] FeeInfo deserialize error!")
+		}
+		feeInfo.Flat = (*data).Flat
+	}
+	bf := new(bytes.Buffer)
+	err = feeInfo.Serialize(bf)
+	if err != nil {
+		log.Error("[GetFeeInfo] FeeInfo Serialize error!")
+		return utils.BYTE_FALSE, errors.NewErr("[GetFeeInfo] FeeInfo Serialize error!")
+	}
+	return bf.Bytes(), nil
+}
+
+func SetFeeInfo(native *native.NativeService) ([]byte, error) {
+	var feeInfo FeeInfo
+	source := common.NewZeroCopySource(native.Input)
+	err := feeInfo.Deserialization(source)
+	if err != nil {
+		log.Error("[SetFeeInfo] FeeInfo deserialization error!")
+		return utils.BYTE_FALSE, errors.NewErr("[SetFeeInfo] FeeInfo deserialization error!")
+	}
+	pkHex := common.ToHexString(feeInfo.PublicKey)
+	pk, err := common.PubKeyFromHex(pkHex)
+	msgHash := FeeInfoMessageBundleHash(feeInfo.WalletAddr, feeInfo.ChannelID)
+	signValue, err := signature.Deserialize(feeInfo.Signature)
+	if err != nil {
+		log.Error("[SetFeeInfo] Signature deserialize error")
+		return utils.BYTE_FALSE, errors.NewErr("[SetFeeInfo] Signature deserialize error")
+	}
+	verify := signature.Verify(pk, msgHash[:], signValue)
+	if !verify {
+		log.Error("[SetFeeInfo] Signature verify error!")
+		return utils.BYTE_FALSE, errors.NewErr("[SetFeeInfo] Signature verify error!")
+	}
+	key := GenFeeKey(utils.MicroPayContractAddress, feeInfo.WalletAddr, feeInfo.ChannelID)
+	utils.PutBytes(native, key, source.Source())
 	return utils.BYTE_TRUE, nil
 }
 

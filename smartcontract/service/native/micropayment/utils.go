@@ -38,6 +38,8 @@ const (
 	MP_SET_NODE_PUBKEY               = "SetNodePubKey"
 	MP_FAST_TRANSFER                 = "FastTransfer"
 	//MP_SETTLEMENT_TRANSFER = "SettlementTransfer"
+	MP_GET_FEEINFO					 = "GetFeeInfo"
+	MP_SET_FEEINFO					 = "SetFeeInfo"
 )
 
 func UpdateBalanceProofData(chanInfo *ChannelInfo, participant common.Address, nonce uint64, balanceHash []byte) error {
@@ -128,6 +130,20 @@ func BalanceProofUpdateMessageBundleHash(channelID uint64, balanceHash []byte, n
 	return sha256.Sum256(messageBundle)
 }
 
+func FeeInfoMessageBundleHash(walletAddr common.Address, channelID uint64) [32]byte {
+	messageType := MessageType{}
+	messageType.TypeId = FEEINFO
+	messageBundle := bytes.Join([][]byte{
+		[]byte(SIGNATURE_PREFIX),
+		[]byte(FEEINFO_MESSAGE_LENGTH),
+		util.Int64ToBytes(messageType.TypeId),
+		walletAddr[:],
+		util.Int64ToBytes(channelID),
+	}, []byte{})
+
+	return sha256.Sum256(messageBundle)
+}
+
 func GetChanInfoFromDB(native *native.NativeService, chanId uint64) (*ChannelInfo, error) {
 	chIdBf := new(bytes.Buffer)
 	utils.WriteVarUint(chIdBf, chanId)
@@ -210,6 +226,14 @@ func GenPubKeyKey(contract common.Address, walletAddr common.Address) []byte {
 	prefix := []byte("PubKeyKey")
 	key := append(contract[:], prefix...)
 	key = append(contract[:], walletAddr[:]...)
+	return key
+}
+
+func GenFeeKey(contract common.Address, walletAddr common.Address, channelId uint64) []byte {
+	prefix := []byte("Fee")
+	key := append(contract[:], prefix...)
+	key = append(contract[:], walletAddr[:]...)
+	key = append(contract[:], []byte(strconv.Itoa(int(channelId)))...)
 	return key
 }
 
