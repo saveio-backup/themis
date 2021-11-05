@@ -130,7 +130,7 @@ func BalanceProofUpdateMessageBundleHash(channelID uint64, balanceHash []byte, n
 	return sha256.Sum256(messageBundle)
 }
 
-func FeeInfoMessageBundleHash(walletAddr common.Address, channelID uint64) [32]byte {
+func FeeInfoMessageBundleHash(walletAddr common.Address, tokenAddr common.Address) [32]byte {
 	messageType := MessageType{}
 	messageType.TypeId = FEEINFO
 	messageBundle := bytes.Join([][]byte{
@@ -138,7 +138,7 @@ func FeeInfoMessageBundleHash(walletAddr common.Address, channelID uint64) [32]b
 		[]byte(FEEINFO_MESSAGE_LENGTH),
 		util.Int64ToBytes(messageType.TypeId),
 		walletAddr[:],
-		util.Int64ToBytes(channelID),
+		tokenAddr[:],
 	}, []byte{})
 
 	return sha256.Sum256(messageBundle)
@@ -229,11 +229,11 @@ func GenPubKeyKey(contract common.Address, walletAddr common.Address) []byte {
 	return key
 }
 
-func GenFeeKey(contract common.Address, walletAddr common.Address, channelId uint64) []byte {
+func GenFeeKey(contract common.Address, walletAddr common.Address, tokenAddr common.Address) []byte {
 	prefix := []byte("Fee")
 	key := append(contract[:], prefix...)
 	key = append(contract[:], walletAddr[:]...)
-	key = append(contract[:], []byte(strconv.Itoa(int(channelId)))...)
+	key = append(contract[:], tokenAddr[:]...)
 	return key
 }
 

@@ -335,13 +335,13 @@ func GetFeeInfo(native *native.NativeService) ([]byte, error) {
 		log.Error("[GetFeeInfo] FeeInfo deserialization error!")
 		return utils.BYTE_FALSE, errors.NewErr("[GetFeeInfo] FeeInfo deserialization error!")
 	}
-	key := GenFeeKey(utils.MicroPayContractAddress, feeInfo.WalletAddr, feeInfo.ChannelID)
+	key := GenFeeKey(utils.MicroPayContractAddress, feeInfo.WalletAddr, feeInfo.TokenAddr)
 	item, err := utils.GetStorageItem(native, key)
 	if err != nil {
 		log.Error("[GetFeeInfo] GetStorageItem error")
 		return utils.BYTE_FALSE, errors.NewErr("[GetFeeInfo] GetStorageItem error")
 	}
-	log.Debugf("GetFeeInfo for node: %v, channel: %v, err: %v\n", feeInfo.WalletAddr, feeInfo.ChannelID, err)
+	log.Debugf("GetFeeInfo for node: %v, channel: %v, err: %v\n", feeInfo.WalletAddr, feeInfo.TokenAddr, err)
 	if item != nil {
 		data := new(FeeInfo)
 		source := common.NewZeroCopySource(item.Value)
@@ -371,7 +371,7 @@ func SetFeeInfo(native *native.NativeService) ([]byte, error) {
 	}
 	pkHex := common.ToHexString(feeInfo.PublicKey)
 	pk, err := common.PubKeyFromHex(pkHex)
-	msgHash := FeeInfoMessageBundleHash(feeInfo.WalletAddr, feeInfo.ChannelID)
+	msgHash := FeeInfoMessageBundleHash(feeInfo.WalletAddr, feeInfo.TokenAddr)
 	signValue, err := signature.Deserialize(feeInfo.Signature)
 	if err != nil {
 		log.Error("[SetFeeInfo] Signature deserialize error")
@@ -382,7 +382,7 @@ func SetFeeInfo(native *native.NativeService) ([]byte, error) {
 		log.Error("[SetFeeInfo] Signature verify error!")
 		return utils.BYTE_FALSE, errors.NewErr("[SetFeeInfo] Signature verify error!")
 	}
-	key := GenFeeKey(utils.MicroPayContractAddress, feeInfo.WalletAddr, feeInfo.ChannelID)
+	key := GenFeeKey(utils.MicroPayContractAddress, feeInfo.WalletAddr, feeInfo.TokenAddr)
 	utils.PutBytes(native, key, source.Source())
 	return utils.BYTE_TRUE, nil
 }
