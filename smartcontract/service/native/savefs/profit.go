@@ -474,8 +474,8 @@ func FsDeleteFiles(native *native.NativeService) ([]byte, error) {
 		}
 	}
 
-	if fileList.FileNum > 0 && len(fileInfos) == 0 {
-		return utils.BYTE_FALSE, errors.NewErr("[FS Profit] FsDeleteFile getFsFileInfo error:")
+	if len(fileInfos) == 0 {
+		return utils.BYTE_TRUE, nil
 	}
 	err = deleteFiles(native, fileInfos)
 	if err != nil {
