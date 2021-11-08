@@ -1,6 +1,7 @@
 package common
 
 import (
+	"github.com/moonfruit/go-shabal"
 	"hash"
 )
 
@@ -11,7 +12,7 @@ type Shabal256 struct {
 
 func NewShabal256() *Shabal256 {
 	result := &Shabal256{}
-
+	result.hasher = shabal.NewShabal256()
 	return result
 }
 
