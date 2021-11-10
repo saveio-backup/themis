@@ -19,6 +19,7 @@ const (
 	EVENT_WITHDRAW
 	EVENT_SECRET_REVEALED
 	EVENT_FAST_TRANSFER
+	EVENT_SET_FEE
 )
 
 type channelOpenedEvent struct {
@@ -133,6 +134,17 @@ func ChannelCooperativeSettledEvent(native *native.NativeService, chanSettledEve
 	newEvent(native, EVENT_CHANNEL_COSETTLED, participants, event)
 }
 
+func ChannelSetFeeEvent(native *native.NativeService, feeInfo FeeInfo, participants []common.Address) {
+	event := map[string]interface{}{
+		"blockHeight":   native.Height, //uint32
+		"eventName":     "SetFee",
+		"walletAddr":    feeInfo.WalletAddr,      //"github.com/saveio/themis/common"
+		"tokenAddr":  	 feeInfo.TokenAddr,
+		"flat": 	     feeInfo.Flat,
+	}
+	newEvent(native, EVENT_SET_FEE, participants, event)
+}
+
 func ChannelOpenedEvent(native *native.NativeService, chanOpened channelOpenedEvent, participants []common.Address) {
 	event := map[string]interface{}{
 		"blockHeight":   native.Height, //uint32
@@ -144,6 +156,7 @@ func ChannelOpenedEvent(native *native.NativeService, chanOpened channelOpenedEv
 	}
 	newEvent(native, EVENT_CHANNEL_OPENED, participants, event)
 }
+
 func ChannelNewDepositEvent(native *native.NativeService, chDeposit channelNewDepositEvent, participants []common.Address) {
 	event := map[string]interface{}{
 		"blockHeight":  native.Height,

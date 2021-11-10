@@ -384,6 +384,7 @@ func SetFeeInfo(native *native.NativeService) ([]byte, error) {
 	}
 	key := GenFeeKey(utils.MicroPayContractAddress, feeInfo.WalletAddr, feeInfo.TokenAddr)
 	utils.PutBytes(native, key, source.Source())
+	ChannelSetFeeEvent(native, feeInfo, []common.Address{feeInfo.WalletAddr, feeInfo.TokenAddr})
 	return utils.BYTE_TRUE, nil
 }
 
