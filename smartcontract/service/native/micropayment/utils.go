@@ -232,8 +232,8 @@ func GenPubKeyKey(contract common.Address, walletAddr common.Address) []byte {
 func GenFeeKey(contract common.Address, walletAddr common.Address, tokenAddr common.Address) []byte {
 	prefix := []byte("Fee")
 	key := append(contract[:], prefix...)
-	key = append(contract[:], walletAddr[:]...)
-	key = append(contract[:], tokenAddr[:]...)
+	key = append(key[:], walletAddr[:]...)
+	key = append(key[:], tokenAddr[:]...)
 	return key
 }
 
