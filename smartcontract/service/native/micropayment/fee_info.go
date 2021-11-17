@@ -12,6 +12,7 @@ type FeeInfo struct {
 	WalletAddr   common.Address
 	TokenAddr	 common.Address
 	Flat         uint64
+	Proportional uint64
 	PublicKey    []byte
 	Signature    []byte
 }
@@ -29,6 +30,10 @@ func (this *FeeInfo) Serialize(w io.Writer) error {
 	err = utils.WriteVarUint(w, this.Flat)
 	if err != nil {
 		return fmt.Errorf("[FeeInfo] [Flat:%v] serialize from error:%v", this.Flat, err)
+	}
+	err = utils.WriteVarUint(w, this.Proportional)
+	if err != nil {
+		return fmt.Errorf("[FeeInfo] [Proportional:%v] serialize from error:%v", this.Proportional, err)
 	}
 	err = utils.WriteBytes(w, this.PublicKey)
 	if err != nil {
@@ -55,6 +60,10 @@ func (this *FeeInfo) Deserialize(r io.Reader) error {
 	if err != nil {
 		return fmt.Errorf("[FeeInfo] [Flat] deserialize from error:%v", err)
 	}
+	this.Proportional, err = utils.ReadVarUint(r)
+	if err != nil {
+		return fmt.Errorf("[FeeInfo] [Proportional] deserialize from error:%v", err)
+	}
 	this.PublicKey, err = utils.ReadBytes(r)
 	if err != nil {
 		return fmt.Errorf("[FeeInfo] [PublicKey] deserialize from error:%v", err)
@@ -70,6 +79,7 @@ func (this *FeeInfo) Serialization(sink *common.ZeroCopySink) {
 	this.WalletAddr.Serialization(sink)
 	this.TokenAddr.Serialization(sink)
 	utils.EncodeVarUint(sink, this.Flat)
+	utils.EncodeVarUint(sink, this.Proportional)
 	utils.EncodeBytes(sink, this.PublicKey)
 	utils.EncodeBytes(sink, this.Signature)
 }
@@ -85,6 +95,10 @@ func (this *FeeInfo) Deserialization(source *common.ZeroCopySource) error {
 		return err
 	}
 	this.Flat, err = utils.DecodeVarUint(source)
+	if err != nil {
+		return err
+	}
+	this.Proportional, err = utils.DecodeVarUint(source)
 	if err != nil {
 		return err
 	}

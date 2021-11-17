@@ -341,17 +341,20 @@ func GetFeeInfo(native *native.NativeService) ([]byte, error) {
 		log.Error("[GetFeeInfo] GetStorageItem error")
 		return utils.BYTE_FALSE, errors.NewErr("[GetFeeInfo] GetStorageItem error")
 	}
-	log.Debugf("GetFeeInfo for node: %v, channel: %v, err: %v\n", feeInfo.WalletAddr, feeInfo.TokenAddr, err)
-	if item != nil {
-		data := new(FeeInfo)
-		source := common.NewZeroCopySource(item.Value)
-		err = data.Deserialization(source)
-		if err != nil {
-			log.Error("[GetFeeInfo] FeeInfo deserialize error!")
-			return utils.BYTE_FALSE, errors.NewErr("[GetFeeInfo] FeeInfo deserialize error!")
-		}
-		feeInfo.Flat = (*data).Flat
+	log.Debugf("GetFeeInfo for node: %v, token: %v, err: %v\n", feeInfo.WalletAddr, feeInfo.TokenAddr, err)
+	if item == nil {
+		return utils.BYTE_FALSE, errors.NewErr("[GetFeeInfo] FeeInfo not set")
 	}
+	data := new(FeeInfo)
+	itemSource := common.NewZeroCopySource(item.Value)
+	err = data.Deserialization(itemSource)
+	if err != nil {
+		log.Error("[GetFeeInfo] FeeInfo deserialize error!")
+		return utils.BYTE_FALSE, errors.NewErr("[GetFeeInfo] FeeInfo deserialize error!")
+	}
+	feeInfo.Flat = (*data).Flat
+	feeInfo.Proportional = (*data).Proportional
+
 	bf := new(bytes.Buffer)
 	err = feeInfo.Serialize(bf)
 	if err != nil {

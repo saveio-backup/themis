@@ -141,6 +141,7 @@ func ChannelSetFeeEvent(native *native.NativeService, feeInfo FeeInfo, participa
 		"walletAddr":    feeInfo.WalletAddr,      //"github.com/saveio/themis/common"
 		"tokenAddr":  	 feeInfo.TokenAddr,
 		"flat": 	     feeInfo.Flat,
+		"proportional":	 feeInfo.Proportional,
 	}
 	newEvent(native, EVENT_SET_FEE, participants, event)
 }
