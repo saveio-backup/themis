@@ -169,6 +169,6 @@ func setProveDetails(native *native.NativeService, fileHash []byte, proveDetails
 func deleteProveDetails(native *native.NativeService, fileHash []byte) {
 	contract := native.ContextRef.CurrentContext().ContractAddress
 
-	fileInfoKey := GenFsFileInfoKey(contract, fileHash)
+	fileInfoKey := GenFsProveDetailsKey(contract, fileHash)
 	utils.DelStorageItem(native, fileInfoKey)
 }
