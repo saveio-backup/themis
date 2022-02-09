@@ -26,10 +26,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/saveio/themis/crypto/keypair"
-	s "github.com/saveio/themis/crypto/signature"
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/core/types"
+	"github.com/saveio/themis/crypto/keypair"
+	s "github.com/saveio/themis/crypto/signature"
 )
 
 //Client of wallet
@@ -147,6 +147,7 @@ func (this *ClientImpl) NewAccount(label string, typeCode keypair.KeyType, curve
 		return nil, fmt.Errorf("generateKeyPair error: %s", err)
 	}
 	address := types.AddressFromPubKey(pubkey)
+	ethAddress := keypair.GetEthAddressFromPrivateKey(prvkey)
 	addressBase58 := address.ToBase58()
 	prvSecret, err := keypair.EncryptPrivateKey(prvkey, addressBase58, passwd)
 	if err != nil {
@@ -166,6 +167,7 @@ func (this *ClientImpl) NewAccount(label string, typeCode keypair.KeyType, curve
 		PrivateKey: prvkey,
 		PublicKey:  pubkey,
 		Address:    address,
+		EthAddress: ethAddress,
 		SigScheme:  sigScheme,
 	}, nil
 }
@@ -210,6 +212,7 @@ func (this *ClientImpl) ImportAccount(accMeta *AccountMetadata) error {
 	accData.Key = accMeta.Key
 	accData.Alg = accMeta.KeyType
 	accData.Address = accMeta.Address
+	accData.EthAddress = accMeta.EthAddress
 	accData.EncAlg = accMeta.EncAlg
 	accData.Hash = accMeta.Hash
 	accData.Salt = accMeta.Salt
@@ -335,6 +338,7 @@ func (this *ClientImpl) getAccountMetadata(accData *AccountData) *AccountMetadat
 	accMeta.SigSch = accData.SigSch
 	accMeta.Key = accData.Key
 	accMeta.Address = accData.Address
+	accMeta.EthAddress = accData.EthAddress
 	accMeta.IsDefault = accData.IsDefault
 	accMeta.PubKey = accData.PubKey
 	accMeta.EncAlg = accData.EncAlg

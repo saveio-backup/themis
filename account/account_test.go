@@ -18,10 +18,12 @@
 package account
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
 	"github.com/saveio/themis/core/types"
+	"github.com/saveio/themis/crypto/ec"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -56,4 +58,21 @@ func TestNewAccount(t *testing.T) {
 		assert.NotNil(t, accounts[k].Scheme())
 		assert.Equal(t, accounts[k].Address, types.AddressFromPubKey(accounts[k].PublicKey))
 	}
+}
+
+func TestGenerateAccount(t *testing.T) {
+	acc1 := NewAccount("SHA256withECDSA")
+	fmt.Printf("Account1 themis address %v\n", acc1.Address)
+	fmt.Printf("Account1 ethereum address %v\n", acc1.EthAddress.String())
+	acc1EcPk := acc1.PrivKey().(*ec.PrivateKey)
+	fmt.Printf("Account1 PublicKey %v, PrivKey %v\n", acc1EcPk.PublicKey, acc1EcPk.PrivateKey)
+	fmt.Printf("Account1 privateKey %x\n", acc1.GetPrivateKey())
+
+	acc2 := NewAccountWithPrivateKey(acc1.GetPrivateKey())
+
+	fmt.Printf("Account2 themis address %v\n", acc2.Address)
+	fmt.Printf("Account2 ethereum address %v\n", acc2.EthAddress.String())
+	acc2EcPk := acc2.PrivKey().(*ec.PrivateKey)
+	fmt.Printf("Account2 PublicKey %v, PrivKey %v\n", acc2EcPk.PublicKey, acc2EcPk.PrivateKey)
+	fmt.Printf("Account2 privateKey %x\n", acc2.GetPrivateKey())
 }

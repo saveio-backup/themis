@@ -25,8 +25,8 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/saveio/themis/crypto/keypair"
 	"github.com/saveio/themis/common"
+	"github.com/saveio/themis/crypto/keypair"
 )
 
 /** AccountData - for wallet read and save, no crypto object included **/
@@ -42,6 +42,7 @@ type AccountData struct {
 
 func (this *AccountData) SetKeyPair(keyinfo *keypair.ProtectedKey) {
 	this.Address = keyinfo.Address
+	this.EthAddress = keyinfo.EthAddress
 	this.EncAlg = keyinfo.EncAlg
 	this.Alg = keyinfo.Alg
 	this.Hash = keyinfo.Hash
@@ -53,6 +54,7 @@ func (this *AccountData) SetKeyPair(keyinfo *keypair.ProtectedKey) {
 func (this *AccountData) GetKeyPair() *keypair.ProtectedKey {
 	var keyinfo = new(keypair.ProtectedKey)
 	keyinfo.Address = this.Address
+	keyinfo.EthAddress = this.EthAddress
 	keyinfo.EncAlg = this.EncAlg
 	keyinfo.Alg = this.Alg
 	keyinfo.Hash = this.Hash

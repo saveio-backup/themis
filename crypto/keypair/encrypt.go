@@ -21,10 +21,17 @@ package keypair
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"math/big"
 
+	ethComm "github.com/ethereum/go-ethereum/common"
+	ethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/saveio/themis/crypto/ec"
 
 	"golang.org/x/crypto/ed25519"
@@ -33,13 +40,14 @@ import (
 
 // ProtectedKey stores the encrypted private key and related data
 type ProtectedKey struct {
-	Address string            `json:"address"`
-	EncAlg  string            `json:"enc-alg"`
-	Key     []byte            `json:"key"`
-	Alg     string            `json:"algorithm"`
-	Salt    []byte            `json:"salt,omitempty"`
-	Hash    string            `json:"hash,omitempty"`
-	Param   map[string]string `json:"parameters,omitempty"`
+	Address    string            `json:"address"`
+	EthAddress string            `json:"ethAddress"`
+	EncAlg     string            `json:"enc-alg"`
+	Key        []byte            `json:"key"`
+	Alg        string            `json:"algorithm"`
+	Salt       []byte            `json:"salt,omitempty"`
+	Hash       string            `json:"hash,omitempty"`
+	Param      map[string]string `json:"parameters,omitempty"`
 }
 
 // ScryptParam contains the parameters used in scrypt function
@@ -71,11 +79,13 @@ func DecryptPrivateKey(prot *ProtectedKey, pwd []byte) (PrivateKey, error) {
 }
 
 func EncryptWithCustomScrypt(pri PrivateKey, addr string, pwd []byte, param *ScryptParam) (*ProtectedKey, error) {
-	var res = ProtectedKey{
-		Address: addr,
-		EncAlg:  "aes-256-gcm",
-	}
 
+	ethAddr := GetEthAddressFromPrivateKey(pri)
+	var res = ProtectedKey{
+		Address:    addr,
+		EthAddress: ethAddr.String(),
+		EncAlg:     "aes-256-gcm",
+	}
 	salt, err := randomBytes(16)
 	if err != nil {
 		return nil, NewEncryptError(err.Error())
@@ -261,4 +271,53 @@ func GetScryptParameters() *ScryptParam {
 		P:     DEFAULT_P,
 		DKLen: DEFAULT_DERIVED_KEY_LENGTH,
 	}
+}
+
+func GetEthAddressFromPrivateKey(privateKey PrivateKey) ethComm.Address {
+	ecPrivateKey := privateKey.(*ec.PrivateKey)
+	privateKeyBuf := ethCrypto.FromECDSA(ecPrivateKey.PrivateKey)
+	ecdsaPrivateKey, err := HexToECDSA(fmt.Sprintf("%x", privateKeyBuf))
+	if err != nil {
+		return ethComm.Address{}
+	}
+	ethAddr := ethCrypto.PubkeyToAddress(ecdsaPrivateKey.PublicKey)
+	return ethAddr
+
+}
+
+// HexToECDSA parses a secp256k1 private key.
+func HexToECDSA(hexkey string) (*ecdsa.PrivateKey, error) {
+	b, err := hex.DecodeString(hexkey)
+	if byteErr, ok := err.(hex.InvalidByteError); ok {
+		return nil, fmt.Errorf("invalid hex character %q in private key", byte(byteErr))
+	} else if err != nil {
+		return nil, errors.New("invalid hex data for private key")
+	}
+	return ToECDSA(b)
+}
+
+// ToECDSA creates a private key with the given D value.
+func ToECDSA(d []byte) (*ecdsa.PrivateKey, error) {
+	priv := new(ecdsa.PrivateKey)
+	priv.PublicKey.Curve = elliptic.P256()
+	if 8*len(d) != priv.Params().BitSize {
+		return nil, fmt.Errorf("invalid length, need %d bits", priv.Params().BitSize)
+	}
+	priv.D = new(big.Int).SetBytes(d)
+
+	// The priv.D must < N
+	// if priv.D.Cmp(secp256k1N) >= 0 {
+	// 	return nil, fmt.Errorf("invalid private key, >=N")
+	// }
+	// The priv.D must not be zero or negative.
+	if priv.D.Sign() <= 0 {
+		return nil, fmt.Errorf("invalid private key, zero or negative")
+	}
+
+	priv.PublicKey.X, priv.PublicKey.Y = priv.PublicKey.Curve.ScalarBaseMult(d)
+	if priv.PublicKey.X == nil {
+		return nil, errors.New("invalid private key")
+	}
+	return priv, nil
+
 }
