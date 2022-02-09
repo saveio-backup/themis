@@ -41,7 +41,6 @@ type Account struct {
 }
 
 func NewAccount(encrypt string) *Account {
-	fmt.Println("new account here")
 	// Determine the public key algorithm and parameters according to
 	// the encrypt.
 	var pkAlgorithm keypair.KeyType
