@@ -47,6 +47,7 @@ func (this *AccountData) SetKeyPair(keyinfo *keypair.ProtectedKey) {
 	this.Alg = keyinfo.Alg
 	this.Hash = keyinfo.Hash
 	this.Key = keyinfo.Key
+	this.EthKey = keyinfo.EthKey
 	this.Param = keyinfo.Param
 	this.Salt = keyinfo.Salt
 }
@@ -59,6 +60,7 @@ func (this *AccountData) GetKeyPair() *keypair.ProtectedKey {
 	keyinfo.Alg = this.Alg
 	keyinfo.Hash = this.Hash
 	keyinfo.Key = this.Key
+	keyinfo.EthKey = this.EthKey
 	keyinfo.Param = this.Param
 	keyinfo.Salt = this.Salt
 	return keyinfo

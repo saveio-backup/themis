@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	ethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/core/types"
 	"github.com/saveio/themis/crypto/keypair"
@@ -142,7 +143,13 @@ func (this *ClientImpl) NewAccount(label string, typeCode keypair.KeyType, curve
 	if len(passwd) == 0 {
 		return nil, fmt.Errorf("password cannot empty")
 	}
-	prvkey, pubkey, err := keypair.GenerateKeyPair(typeCode, curveCode)
+
+	pv, err := ethCrypto.GenerateKey()
+	if err != nil {
+		return nil, err
+	}
+
+	prvkey, pubkey, err := keypair.GenerateKeyPairWithSeed(typeCode, bytes.NewReader(ethCrypto.FromECDSA(pv)), curveCode)
 	if err != nil {
 		return nil, fmt.Errorf("generateKeyPair error: %s", err)
 	}
@@ -210,6 +217,7 @@ func (this *ClientImpl) ImportAccount(accMeta *AccountMetadata) error {
 	accData.PubKey = accMeta.PubKey
 	accData.SigSch = accMeta.SigSch
 	accData.Key = accMeta.Key
+	accData.EthKey = accMeta.EthKey
 	accData.Alg = accMeta.KeyType
 	accData.Address = accMeta.Address
 	accData.EthAddress = accMeta.EthAddress
@@ -337,6 +345,7 @@ func (this *ClientImpl) getAccountMetadata(accData *AccountData) *AccountMetadat
 	accMeta.KeyType = accData.Alg
 	accMeta.SigSch = accData.SigSch
 	accMeta.Key = accData.Key
+	accMeta.EthKey = accData.EthKey
 	accMeta.Address = accData.Address
 	accMeta.EthAddress = accData.EthAddress
 	accMeta.IsDefault = accData.IsDefault

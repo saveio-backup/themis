@@ -265,28 +265,28 @@ func TestEd25519(t *testing.T) {
 	testSignAndVerify(t, pri, pub, sig)
 }
 
-func TestAllSchemeECDSA(t *testing.T) {
-	for c := keypair.P224; c < keypair.P521; c++ {
-		pri, _, err := keypair.GenerateKeyPair(keypair.PK_ECDSA, c)
-		if err != nil {
-			t.Fatal(err)
-		}
+// func TestAllSchemeECDSA(t *testing.T) {
+// 	for c := keypair.P224; c < keypair.P521; c++ {
+// 		pri, _, err := keypair.GenerateKeyPair(keypair.PK_ECDSA, c)
+// 		if err != nil {
+// 			t.Fatal(err)
+// 		}
 
-		for scheme := SHA224withECDSA; scheme < RIPEMD160withECDSA; scheme++ {
-			sig, err := Sign(SHA256withECDSA, pri, msg, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
+// 		for scheme := SHA224withECDSA; scheme < RIPEMD160withECDSA; scheme++ {
+// 			sig, err := Sign(SHA256withECDSA, pri, msg, nil)
+// 			if err != nil {
+// 				t.Fatal(err)
+// 			}
 
-			buf, err := Serialize(sig)
-			if err != nil {
-				t.Fatal(err)
-			}
+// 			buf, err := Serialize(sig)
+// 			if err != nil {
+// 				t.Fatal(err)
+// 			}
 
-			testDeserialize(t, buf, sig)
-		}
-	}
-}
+// 			testDeserialize(t, buf, sig)
+// 		}
+// 	}
+// }
 
 func TestSM2SV(t *testing.T) {
 	buf, _ := hex.DecodeString("1314ab80a7ad086249c01e65c4d9bb6ce18de259dcfc218cd49f2455c539e9112ca3031220580679fda524f575ac48b39b9f74cb0a97993df4fac5798b04c702d07a39")
@@ -421,73 +421,73 @@ func BenchmarkP256Verify(b *testing.B) {
 	}
 }
 
-func BenchmarkP384Sign(b *testing.B) {
-	pri, _, _ := keypair.GenerateKeyPair(keypair.PK_ECDSA, keypair.P384)
-	for i := 0; i < b.N; i++ {
-		Sign(SHA384withECDSA, pri, msg, nil)
-	}
-}
+// func BenchmarkP384Sign(b *testing.B) {
+// 	pri, _, _ := keypair.GenerateKeyPair(keypair.PK_ECDSA, keypair.P384)
+// 	for i := 0; i < b.N; i++ {
+// 		Sign(SHA384withECDSA, pri, msg, nil)
+// 	}
+// }
 
-func BenchmarkP384Verify(b *testing.B) {
-	x, _ := new(big.Int).SetString("6bec622a3d59b424d7ecb69488ff0c2e69280ca132d1977ee87472f87df4914ebce8f38d28c588ad954fe8a6d51a5dfb0", 16)
-	y, _ := new(big.Int).SetString("2452ba0d1981dffeab4931f21fd834c44c6108c35ab2f6485cb244467f442491fecdf96797dd32455aa8e5a9d9bad7c70", 16)
-	pub := &ec.PublicKey{
-		Algorithm: ec.ECDSA,
-		PublicKey: &ecdsa.PublicKey{
-			X:     x,
-			Y:     y,
-			Curve: elliptic.P384(),
-		},
-	}
-	r, _ := new(big.Int).SetString("43731a8e0030a8d6a3ba9ff073805d196009f9bf90170dcf1b2f67766a489dffb6c2725d42d6780bc6f1990908cf04c0", 16)
-	s, _ := new(big.Int).SetString("223b260af3d80188c98fef15c359a16ac2bcde7d7e5441fd659bf9c6daa8185adbcddf46773a3804ae4eb095530d3132", 16)
-	sig := &Signature{
-		Scheme: SHA384withECDSA,
-		Value: &DSASignature{
-			R:     r,
-			S:     s,
-			Curve: elliptic.P384(),
-		},
-	}
+// func BenchmarkP384Verify(b *testing.B) {
+// 	x, _ := new(big.Int).SetString("6bec622a3d59b424d7ecb69488ff0c2e69280ca132d1977ee87472f87df4914ebce8f38d28c588ad954fe8a6d51a5dfb0", 16)
+// 	y, _ := new(big.Int).SetString("2452ba0d1981dffeab4931f21fd834c44c6108c35ab2f6485cb244467f442491fecdf96797dd32455aa8e5a9d9bad7c70", 16)
+// 	pub := &ec.PublicKey{
+// 		Algorithm: ec.ECDSA,
+// 		PublicKey: &ecdsa.PublicKey{
+// 			X:     x,
+// 			Y:     y,
+// 			Curve: elliptic.P384(),
+// 		},
+// 	}
+// 	r, _ := new(big.Int).SetString("43731a8e0030a8d6a3ba9ff073805d196009f9bf90170dcf1b2f67766a489dffb6c2725d42d6780bc6f1990908cf04c0", 16)
+// 	s, _ := new(big.Int).SetString("223b260af3d80188c98fef15c359a16ac2bcde7d7e5441fd659bf9c6daa8185adbcddf46773a3804ae4eb095530d3132", 16)
+// 	sig := &Signature{
+// 		Scheme: SHA384withECDSA,
+// 		Value: &DSASignature{
+// 			R:     r,
+// 			S:     s,
+// 			Curve: elliptic.P384(),
+// 		},
+// 	}
 
-	for i := 0; i < b.N; i++ {
-		Verify(pub, msg, sig)
-	}
-}
+// 	for i := 0; i < b.N; i++ {
+// 		Verify(pub, msg, sig)
+// 	}
+// }
 
-func BenchmarkP521Sign(b *testing.B) {
-	pri, _, _ := keypair.GenerateKeyPair(keypair.PK_ECDSA, keypair.P521)
-	for i := 0; i < b.N; i++ {
-		Sign(SHA512withECDSA, pri, msg, nil)
-	}
-}
+// func BenchmarkP521Sign(b *testing.B) {
+// 	pri, _, _ := keypair.GenerateKeyPair(keypair.PK_ECDSA, keypair.P521)
+// 	for i := 0; i < b.N; i++ {
+// 		Sign(SHA512withECDSA, pri, msg, nil)
+// 	}
+// }
 
-func BenchmarkP521Verify(b *testing.B) {
-	x, _ := new(big.Int).SetString("0159a7ecf17fc78849a8847b8fbbfe3ef6fc26d5c26f668be06af1443afacce81514bf3c766d67f705335c26cdf099632f67af27e42a72a0199aae3052ed43fa781a0", 16)
-	y, _ := new(big.Int).SetString("3011a6ae6b6c75b08429be63a690339c15598af51f4851034922a407adaf9a929afedfeb2172fd2914ae4bd461f64d94f1e87533153144cfa9822e613a7c06a389fb8", 16)
-	pub := &ec.PublicKey{
-		Algorithm: ec.ECDSA,
-		PublicKey: &ecdsa.PublicKey{
-			X:     x,
-			Y:     y,
-			Curve: elliptic.P521(),
-		},
-	}
-	r, _ := new(big.Int).SetString("018d125633746ead579fd5b6844d06032ad211b8c6193431c1fdab33e5c00da2c69905e0e42be057b8266f4795d5d806c10882d048d8f9f397723f90cb38718619ab", 16)
-	s, _ := new(big.Int).SetString("009a63c9648382fa72499cc2de8d68d630ffd17db17143549763d8dbbc19a07c6aae08ad04f233bc08acca56922cc8d1ecf30da15c9f5642c1ed4ef4447768e1c027", 16)
-	sig := &Signature{
-		Scheme: SHA512withECDSA,
-		Value: &DSASignature{
-			R:     r,
-			S:     s,
-			Curve: elliptic.P521(),
-		},
-	}
+// func BenchmarkP521Verify(b *testing.B) {
+// 	x, _ := new(big.Int).SetString("0159a7ecf17fc78849a8847b8fbbfe3ef6fc26d5c26f668be06af1443afacce81514bf3c766d67f705335c26cdf099632f67af27e42a72a0199aae3052ed43fa781a0", 16)
+// 	y, _ := new(big.Int).SetString("3011a6ae6b6c75b08429be63a690339c15598af51f4851034922a407adaf9a929afedfeb2172fd2914ae4bd461f64d94f1e87533153144cfa9822e613a7c06a389fb8", 16)
+// 	pub := &ec.PublicKey{
+// 		Algorithm: ec.ECDSA,
+// 		PublicKey: &ecdsa.PublicKey{
+// 			X:     x,
+// 			Y:     y,
+// 			Curve: elliptic.P521(),
+// 		},
+// 	}
+// 	r, _ := new(big.Int).SetString("018d125633746ead579fd5b6844d06032ad211b8c6193431c1fdab33e5c00da2c69905e0e42be057b8266f4795d5d806c10882d048d8f9f397723f90cb38718619ab", 16)
+// 	s, _ := new(big.Int).SetString("009a63c9648382fa72499cc2de8d68d630ffd17db17143549763d8dbbc19a07c6aae08ad04f233bc08acca56922cc8d1ecf30da15c9f5642c1ed4ef4447768e1c027", 16)
+// 	sig := &Signature{
+// 		Scheme: SHA512withECDSA,
+// 		Value: &DSASignature{
+// 			R:     r,
+// 			S:     s,
+// 			Curve: elliptic.P521(),
+// 		},
+// 	}
 
-	for i := 0; i < b.N; i++ {
-		Verify(pub, msg, sig)
-	}
-}
+// 	for i := 0; i < b.N; i++ {
+// 		Verify(pub, msg, sig)
+// 	}
+// }
 
 func BenchmarkSM2Sign(b *testing.B) {
 	pri, _, _ := keypair.GenerateKeyPair(keypair.PK_SM2, keypair.SM2P256V1)

@@ -92,6 +92,13 @@ func calcDepositFeeForUserSpace(userspace *UserSpace, setting *FsSetting, curren
 }
 
 func calcProveTimesByUploadInfo(uploadInfo *UploadOption, beginHeight uint32) uint64 {
+	if uploadInfo.ProveInterval == 0 {
+		if (uploadInfo.ProveLevel) == 0 {
+			uploadInfo.ProveLevel = DeFAULT_PROVE_LEVEL
+		}
+		uploadInfo.ProveInterval = GetProveIntervalByProveLevel(uploadInfo.ProveLevel)
+	}
+
 	return (uploadInfo.ExpiredHeight-uint64(beginHeight))/uploadInfo.ProveInterval + 1
 }
 

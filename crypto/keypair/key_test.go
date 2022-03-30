@@ -23,9 +23,13 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"encoding/hex"
+	"fmt"
+	"io"
 	"math/big"
+	"os"
 	"testing"
 
+	ethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/saveio/themis/crypto/ec"
 	"github.com/saveio/themis/crypto/sm2"
 )
@@ -34,8 +38,8 @@ func TestKeyPairGeneration(t *testing.T) {
 	t.Log("test ECDSA key with curve P256")
 	testKeyGen(PK_ECDSA, P224, t)
 	testKeyGen(PK_ECDSA, P256, t)
-	testKeyGen(PK_ECDSA, P384, t)
-	testKeyGen(PK_ECDSA, P521, t)
+	// testKeyGen(PK_ECDSA, P384, t)
+	// testKeyGen(PK_ECDSA, P521, t)
 
 	t.Log("test SM2 key")
 	testKeyGen(PK_SM2, SM2P256V1, t)
@@ -209,4 +213,105 @@ func TestWIF(t *testing.T) {
 	if v.D.Text(16) != hf {
 		t.Fatal("error key value")
 	}
+}
+
+func TestGenerateKeyPairWithSeed(t *testing.T) {
+	seedBuf, err := hex.DecodeString("9a1603d907432502cfcc9ac2d60ec76068cd57f2c30f1d7c8f55fd625e876eba")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("len %d\n", len(seedBuf))
+	seed := bytes.NewReader([]byte(seedBuf))
+
+	readBuf := make([]byte, 32)
+	cnt, err := io.ReadFull(seed, readBuf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("cnt %v %d-%d\n", readBuf, len(readBuf), cnt)
+	os.Exit(0)
+
+	pri, pub, err := GenerateKeyPairWithSeed(
+		PK_ECDSA,
+		seed,
+		P256,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("privateKey %x, publicKey %x len %d-%d \n", SerializePrivateKey(pri), SerializePublicKey(pub), len(SerializePrivateKey(pri)), len(SerializePublicKey(pub)))
+
+	seed2 := bytes.NewReader([]byte(seedBuf))
+	pri, pub, err = GenerateKeyPairWithSeed(
+		PK_EDDSA,
+		seed2,
+		ED25519,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("privateKey %x, publicKey %x len %d-%d \n", SerializePrivateKey(pri), SerializePublicKey(pub), len(SerializePrivateKey(pri)), len(SerializePublicKey(pub)))
+
+	seed3 := bytes.NewReader([]byte(seedBuf))
+	pri, pub, err = GenerateKeyPairWithSeed(
+		PK_ECDSA,
+		seed3,
+		P224,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("privateKey %x, publicKey %x len %d-%d \n", SerializePrivateKey(pri), SerializePublicKey(pub), len(SerializePrivateKey(pri)), len(SerializePublicKey(pub)))
+
+	seed4 := bytes.NewReader([]byte(seedBuf))
+	pri, pub, err = GenerateKeyPairWithSeed(
+		PK_SM2,
+		seed4,
+		SM2P256V1,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("privateKey %x, publicKey %x len %d-%d \n", SerializePrivateKey(pri), SerializePublicKey(pub), len(SerializePrivateKey(pri)), len(SerializePublicKey(pub)))
+}
+
+func TestEncryptS256PrivateKey(t *testing.T) {
+
+	key, err := hex.DecodeString("9a1603d907432502cfcc9ac2d60ec76068cd57f2c30f1d7c8f55fd625e876eba")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("Key %v\n", key)
+	privKey, err := ethCrypto.ToECDSA(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	addr := ethCrypto.PubkeyToAddress(privKey.PublicKey)
+	fmt.Printf("addr %s\n", addr.String())
+
+	ecPk, ecPub, err := GenerateKeyPairWithSeed(
+		PK_ECDSA,
+		bytes.NewReader(key),
+		P256,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	protectedKey, err := EncryptPrivateKey(ecPk, "123", []byte("123"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("protectedKet %v\n", protectedKey)
+	fmt.Printf("protectedKet-eth %v\n", protectedKey.EthAddress)
+	fmt.Printf("ecPk %v\n", ecPk)
+	fmt.Printf("ecPub %v\n", ecPub)
+
+	dePriv, err := DecryptPrivateKey(protectedKey, []byte("123"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("dePriv %v\n", dePriv)
+
 }

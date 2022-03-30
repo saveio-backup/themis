@@ -19,6 +19,7 @@
 package ec
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -33,6 +34,8 @@ const (
 	nocompress    = 4
 )
 
+const EC_SEED_SIZE = 32
+
 type ECAlgorithm byte
 
 const (
@@ -43,6 +46,7 @@ const (
 
 type PrivateKey struct {
 	Algorithm ECAlgorithm
+	Raw       []byte
 	*ecdsa.PrivateKey
 }
 
@@ -55,8 +59,15 @@ func (this *PrivateKey) Public() crypto.PublicKey {
 	return &PublicKey{Algorithm: this.Algorithm, PublicKey: &this.PublicKey}
 }
 
-func GenerateECKeyPair(c elliptic.Curve, rand io.Reader, alg ECAlgorithm) (*PrivateKey, *PublicKey, error) {
-	d, x, y, err := elliptic.GenerateKey(c, rand)
+func GenerateECKeyPair(c elliptic.Curve, seed io.Reader, alg ECAlgorithm) (*PrivateKey, *PublicKey, error) {
+	raw := make([]byte, EC_SEED_SIZE)
+	_, err := io.ReadFull(seed, raw)
+	if err != nil {
+		return nil, nil, errors.New("Read ec seed failed, " + err.Error())
+	}
+	newReader := bytes.NewReader(raw)
+
+	d, x, y, err := elliptic.GenerateKey(c, newReader)
 	if err != nil {
 		return nil, nil, errors.New("Generate ec key pair failed, " + err.Error())
 	}
@@ -70,6 +81,7 @@ func GenerateECKeyPair(c elliptic.Curve, rand io.Reader, alg ECAlgorithm) (*Priv
 				Curve: c,
 			},
 		},
+		Raw: raw,
 	}
 	pub := PublicKey{
 		Algorithm: alg,
@@ -142,6 +154,22 @@ func ConstructPrivateKey(data []byte, curve elliptic.Curve) *ecdsa.PrivateKey {
 
 	return &ecdsa.PrivateKey{
 		D: d,
+		PublicKey: ecdsa.PublicKey{
+			X:     x,
+			Y:     y,
+			Curve: curve,
+		},
+	}
+}
+
+func ConstructPrivateKeyWithSeed(data []byte, curve elliptic.Curve) *ecdsa.PrivateKey {
+	newReader := bytes.NewReader(data)
+	d, x, y, err := elliptic.GenerateKey(curve, newReader)
+	if err != nil {
+		return nil
+	}
+	return &ecdsa.PrivateKey{
+		D: new(big.Int).SetBytes(d),
 		PublicKey: ecdsa.PublicKey{
 			X:     x,
 			Y:     y,

@@ -19,12 +19,11 @@
 package account
 
 import (
-	"fmt"
+	"bytes"
 
 	ethComm "github.com/ethereum/go-ethereum/common"
 	ethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/saveio/themis/common"
-	"github.com/saveio/themis/common/log"
 	"github.com/saveio/themis/core/types"
 	"github.com/saveio/themis/crypto/ec"
 	"github.com/saveio/themis/crypto/keypair"
@@ -43,19 +42,19 @@ type Account struct {
 func NewAccount(encrypt string) *Account {
 	// Determine the public key algorithm and parameters according to
 	// the encrypt.
-	var pkAlgorithm keypair.KeyType
-	var params interface{}
-	var scheme s.SignatureScheme
-	var err error
-	if "" != encrypt {
-		scheme, err = s.GetScheme(encrypt)
-	} else {
-		scheme = s.SHA256withECDSA
-	}
-	if err != nil {
-		log.Warn("unknown signature scheme, use SHA256withECDSA as default.")
-		scheme = s.SHA256withECDSA
-	}
+	// var pkAlgorithm keypair.KeyType
+	// var params interface{}
+	// var scheme s.SignatureScheme
+	// var err error
+	// if "" != encrypt {
+	// 	scheme, err = s.GetScheme(encrypt)
+	// } else {
+	// 	scheme = s.SHA256withECDSA
+	// }
+	// if err != nil {
+	// 	log.Warn("unknown signature scheme, use SHA256withECDSA as default.")
+	// 	scheme = s.SHA256withECDSA
+	// }
 	// switch scheme {
 	// case s.SHA224withECDSA, s.SHA3_224withECDSA:
 	// 	pkAlgorithm = keypair.PK_ECDSA
@@ -78,22 +77,11 @@ func NewAccount(encrypt string) *Account {
 	// }
 
 	// only support SHA256withECDSA to generate ethereum account
-	pkAlgorithm = keypair.PK_ECDSA
-	params = keypair.P256
-	scheme = s.SHA256withECDSA
-
-	pri, pub, _ := keypair.GenerateKeyPair(pkAlgorithm, params)
-	address := types.AddressFromPubKey(pub)
-
-	ethAddr := keypair.GetEthAddressFromPrivateKey(pri)
-
-	return &Account{
-		PrivateKey: pri,
-		PublicKey:  pub,
-		Address:    address,
-		EthAddress: ethAddr,
-		SigScheme:  scheme,
+	pv, err := ethCrypto.GenerateKey()
+	if err != nil {
+		return nil
 	}
+	return NewAccountWithPrivateKey(ethCrypto.FromECDSA(pv))
 }
 
 func (this *Account) PrivKey() keypair.PrivateKey {
@@ -108,40 +96,34 @@ func (this *Account) Scheme() s.SignatureScheme {
 	return this.SigScheme
 }
 
-func (this *Account) GetPrivateKey() []byte {
+func (this *Account) GetEthPrivateKey() []byte {
 	ecdsaPrivateKey := this.PrivateKey.(*ec.PrivateKey)
-	privateKey := ethCrypto.FromECDSA(ecdsaPrivateKey.PrivateKey)
-	// privateKey, err := HexToECDSA(fmt.Sprintf("%x", privateKeyBuf))
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// addr := ethCrypto.PubkeyToAddress(privateKey.PublicKey)
-	// log.Infof("privateKey %x, save addr %s, eth addr %s", ecdsaPrivateKey.PrivateKey.D, acc.Address, addr)
+	return ecdsaPrivateKey.Raw
+}
 
-	return privateKey
+func (this *Account) GetPublicKey() *ec.PublicKey {
+	return this.PublicKey.(*ec.PublicKey)
 }
 
 func NewAccountWithPrivateKey(privateKey []byte) *Account {
 
-	ecdsaPrivateKey, err := keypair.HexToECDSA(fmt.Sprintf("%x", privateKey))
+	pri, pub, err := keypair.GenerateKeyPairWithSeed(
+		keypair.PK_ECDSA,
+		bytes.NewReader(privateKey),
+		keypair.P256,
+	)
 	if err != nil {
-		return nil
+		panic(err)
 	}
-	addr := ethCrypto.PubkeyToAddress(ecdsaPrivateKey.PublicKey)
-	ecPublicKey := &ec.PublicKey{
-		Algorithm: ec.ECDSA,
-		PublicKey: &ecdsaPrivateKey.PublicKey,
-	}
-	ecPrivateKey := &ec.PrivateKey{
-		Algorithm:  ec.ECDSA,
-		PrivateKey: ecdsaPrivateKey,
-	}
-	saveAddr := types.AddressFromPubKey(ecPublicKey)
+	address := types.AddressFromPubKey(pub)
+
+	ethAddr := keypair.GetEthAddressFromPrivateKey(pri)
+
 	return &Account{
-		PrivateKey: ecPrivateKey,
-		PublicKey:  ecPublicKey,
-		Address:    saveAddr,
-		EthAddress: addr,
+		PrivateKey: pri,
+		PublicKey:  pub,
+		Address:    address,
+		EthAddress: ethAddr,
 		SigScheme:  s.SHA256withECDSA,
 	}
 
@@ -159,6 +141,79 @@ type AccountMetadata struct {
 	SigSch     string //Signature scheme
 	Salt       []byte //Salt
 	Key        []byte //PrivateKey in encrypted
+	EthKey     []byte // Ethereum PrivateKey
 	EncAlg     string //Encrypt alg of private key
 	Hash       string //Hash alg
+}
+
+func CheckKeyTypeCurve(keyType keypair.KeyType, curveCode byte) bool {
+	switch keyType {
+	case keypair.PK_ECDSA:
+		switch curveCode {
+		case keypair.P224:
+		case keypair.P256:
+		default:
+			return false
+		}
+	case keypair.PK_SM2:
+		switch curveCode {
+		case keypair.SM2P256V1:
+		default:
+			return false
+		}
+	case keypair.PK_EDDSA:
+		switch curveCode {
+		case keypair.ED25519:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func CheckSigScheme(keyType keypair.KeyType, sigScheme s.SignatureScheme) bool {
+	switch keyType {
+	case keypair.PK_ECDSA:
+		switch sigScheme {
+		case s.SHA224withECDSA:
+		case s.SHA256withECDSA:
+		case s.SHA384withECDSA:
+		case s.SHA512withECDSA:
+		case s.SHA3_224withECDSA:
+		case s.SHA3_256withECDSA:
+		case s.SHA3_384withECDSA:
+		case s.SHA3_512withECDSA:
+		case s.RIPEMD160withECDSA:
+		default:
+			return false
+		}
+	case keypair.PK_SM2:
+		switch sigScheme {
+		case s.SM3withSM2:
+		default:
+			return false
+		}
+	case keypair.PK_EDDSA:
+		switch sigScheme {
+		case s.SHA512withEDDSA:
+		default:
+			return false
+		}
+	default:
+		return false
+	}
+	return true
+}
+
+func GetKeyTypeString(keyType keypair.KeyType) string {
+	switch keyType {
+	case keypair.PK_ECDSA:
+		return "ECDSA"
+	case keypair.PK_SM2:
+		return "SM2"
+	case keypair.PK_EDDSA:
+		return "Ed25519"
+	default:
+		return "unknown key type"
+	}
 }

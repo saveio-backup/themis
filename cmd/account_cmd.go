@@ -263,11 +263,13 @@ func accountList(ctx *cli.Context) error {
 			PrintInfoMsg("%v\t%v", i, accMeta.Address)
 		}
 		PrintInfoMsg("	Label: %v", accMeta.Label)
+		PrintInfoMsg("	Address: %v", accMeta.Address)
+		PrintInfoMsg("	EthAddress: %v", accMeta.EthAddress)
 		PrintInfoMsg("	Signature algorithm: %v", accMeta.KeyType)
 		PrintInfoMsg("	Curve: %v", accMeta.Curve)
 		PrintInfoMsg("	Key length: %v bits", len(accMeta.Key)*8)
 		PrintInfoMsg("	Public key: %v", accMeta.PubKey)
-		PrintInfoMsg("	Signature scheme: %v\n", accMeta.SigSch)
+		PrintInfoMsg("	Signature scheme: %v", accMeta.SigSch)
 		PrintInfoMsg("	Id(For PoC):%d", utils.WalletAddressToId([]byte(accMeta.Address)))
 	}
 	return nil

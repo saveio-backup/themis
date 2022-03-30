@@ -34,6 +34,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"reflect"
 
@@ -100,6 +101,43 @@ func GenerateKeyPair(t KeyType, opts interface{}) (PrivateKey, PublicKey, error)
 
 		if param == ED25519 {
 			pub, pri, err := ed25519.GenerateKey(rand.Reader)
+			return pri, pub, err
+		} else {
+			return nil, nil, errors.New(err_generate + "unsupported EdDSA scheme")
+		}
+	default:
+		return nil, nil, errors.New(err_generate + "unknown algorithm")
+	}
+}
+
+func GenerateKeyPairWithSeed(t KeyType, seed io.Reader, opts interface{}) (PrivateKey, PublicKey, error) {
+	switch t {
+	case PK_ECDSA, PK_SM2, PK_ECIES:
+		param, ok := opts.(byte)
+		if !ok {
+			return nil, nil, errors.New(err_generate + "invalid EC options, 1 byte curve label excepted")
+		}
+		c, err := GetCurve(param)
+		if err != nil {
+			return nil, nil, errors.New(err_generate + err.Error())
+		}
+
+		if t == PK_ECDSA {
+			return ec.GenerateECKeyPair(c, seed, ec.ECDSA)
+		} else if t == PK_ECIES {
+			return ec.GenerateECKeyPair(c, seed, ec.ECIES)
+		} else {
+			return ec.GenerateECKeyPair(c, seed, ec.SM2)
+		}
+
+	case PK_EDDSA:
+		param, ok := opts.(byte)
+		if !ok {
+			return nil, nil, errors.New(err_generate + "invalid EdDSA option")
+		}
+
+		if param == ED25519 {
+			pub, pri, err := ed25519.GenerateKey(seed)
 			return pri, pub, err
 		} else {
 			return nil, nil, errors.New(err_generate + "unsupported EdDSA scheme")
@@ -180,6 +218,7 @@ func SerializePublicKey(key PublicKey) []byte {
 		buf.WriteByte(ED25519)
 		buf.Write([]byte(t))
 	default:
+		fmt.Printf("keyType %T\n", key)
 		panic("unknown public key type")
 	}
 

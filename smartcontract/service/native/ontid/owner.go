@@ -23,11 +23,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/saveio/themis/crypto/keypair"
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/common/config"
 	"github.com/saveio/themis/common/log"
 	"github.com/saveio/themis/core/states"
+	"github.com/saveio/themis/crypto/keypair"
 	"github.com/saveio/themis/smartcontract/service/native"
 	"github.com/saveio/themis/smartcontract/service/native/utils"
 )
@@ -450,10 +450,10 @@ func keyType(publicKey []byte) (string, string, error) {
 			return "EcdsaSecp224r1VerificationKey2019", hex.EncodeToString(publicKey[2:]), nil
 		case keypair.P256:
 			return "EcdsaSecp256r1VerificationKey2019", hex.EncodeToString(publicKey[2:]), nil
-		case keypair.P384:
-			return "EcdsaSecp384r1VerificationKey2019", hex.EncodeToString(publicKey[2:]), nil
-		case keypair.P521:
-			return "EcdsaSecp521r1VerificationKey2019", hex.EncodeToString(publicKey[2:]), nil
+		// case keypair.P384:
+		// 	return "EcdsaSecp384r1VerificationKey2019", hex.EncodeToString(publicKey[2:]), nil
+		// case keypair.P521:
+		// 	return "EcdsaSecp521r1VerificationKey2019", hex.EncodeToString(publicKey[2:]), nil
 		case keypair.SECP256K1:
 			return "EcdsaSecp256k1VerificationKey2019", hex.EncodeToString(publicKey[2:]), nil
 		default:

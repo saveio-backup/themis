@@ -18,12 +18,16 @@
 package account
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"testing"
 
+	ethCrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/saveio/themis/core/signature"
 	"github.com/saveio/themis/core/types"
 	"github.com/saveio/themis/crypto/ec"
+	"github.com/saveio/themis/crypto/keypair"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -60,19 +64,76 @@ func TestNewAccount(t *testing.T) {
 	}
 }
 
+func TestGenerateETHAccount(t *testing.T) {
+	pv, err := ethCrypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateKey := hex.EncodeToString(ethCrypto.FromECDSA(pv))
+	addr := ethCrypto.PubkeyToAddress(pv.PublicKey)
+	fmt.Printf("pk %s, addr %s\n", privateKey, addr.String())
+}
+
 func TestGenerateAccount(t *testing.T) {
 	acc1 := NewAccount("SHA256withECDSA")
 	fmt.Printf("Account1 themis address %v\n", acc1.Address)
 	fmt.Printf("Account1 ethereum address %v\n", acc1.EthAddress.String())
-	acc1EcPk := acc1.PrivKey().(*ec.PrivateKey)
-	fmt.Printf("Account1 PublicKey %v, PrivKey %v\n", acc1EcPk.PublicKey, acc1EcPk.PrivateKey)
-	fmt.Printf("Account1 privateKey %x\n", acc1.GetPrivateKey())
+	// acc1EcPk := acc1.PrivKey().(*ec.PrivateKey)
+	fmt.Printf("Account1 PublicKey %x, PrivKey %x\n", keypair.SerializePublicKey(acc1.PublicKey), keypair.SerializePrivateKey(acc1.PrivateKey))
+	fmt.Printf("Account1 privateKey %x\n", acc1.GetEthPrivateKey())
 
-	acc2 := NewAccountWithPrivateKey(acc1.GetPrivateKey())
+	acc2 := NewAccountWithPrivateKey(acc1.GetEthPrivateKey())
 
 	fmt.Printf("Account2 themis address %v\n", acc2.Address)
 	fmt.Printf("Account2 ethereum address %v\n", acc2.EthAddress.String())
 	acc2EcPk := acc2.PrivKey().(*ec.PrivateKey)
 	fmt.Printf("Account2 PublicKey %v, PrivKey %v\n", acc2EcPk.PublicKey, acc2EcPk.PrivateKey)
-	fmt.Printf("Account2 privateKey %x\n", acc2.GetPrivateKey())
+	fmt.Printf("Account2 privateKey %x\n", acc2.GetEthPrivateKey())
+}
+
+func TestNewAccountPubKey(t *testing.T) {
+	acc1 := NewAccount("SHA256withECDSA")
+	fmt.Printf("Account1 themis address %v\n", acc1.Address)
+	fmt.Printf("Account1 ethereum address %v\n", acc1.EthAddress.String())
+	acc1EcPk := acc1.PrivKey().(*ec.PrivateKey)
+	fmt.Printf("Account1 PublicKey %v, PrivKey %v\n", acc1EcPk.PublicKey, acc1EcPk.PrivateKey)
+	fmt.Printf("Account1 privateKey %x\n", acc1.GetEthPrivateKey())
+
+	pubKeyData := keypair.SerializePublicKey(acc1.PublicKey)
+	fmt.Printf("Pubkey %x\n", pubKeyData)
+
+	pubKey, err := keypair.DeserializePublicKey(pubKeyData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("pubKey %v\n", pubKey)
+}
+
+func TestAccountSignTx(t *testing.T) {
+
+	pk, _ := hex.DecodeString("db0e8a343062823ee611423d11b11e1ed4cdde442ec204f80406fa084c601002")
+	acc1 := NewAccountWithPrivateKey(pk)
+
+	fmt.Printf("acc++ %s\n", acc1.Address.ToBase58())
+	fmt.Printf("acc from++ %s\n", types.AddressFromPubKey(acc1.GetPublicKey()))
+	fmt.Printf("pubkey %x\n", keypair.SerializePublicKey(acc1.PublicKey))
+	fmt.Printf("EthAddress++ %s\n", acc1.EthAddress.String())
+
+	realData, err := hex.DecodeString("1d1c7304fbb608f507f891680e2e6f745f109406d1cc037a9608454b3338110e")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// data := []byte("1d1c7304fbb608f507f891680e2e6f745f109406d1cc037a9608454b3338110e")
+	sigData, err := signature.Sign(acc1, realData)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Printf("sigData %x\n", sigData)
+	err = signature.Verify(
+		acc1.PublicKey, realData, sigData,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
