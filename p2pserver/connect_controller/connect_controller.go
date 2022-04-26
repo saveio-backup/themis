@@ -363,7 +363,10 @@ func (self *ConnectController) checkPeerIdAndIP(peer *peer.PeerInfo, addr string
 	}
 
 	if ipNew != ipOld {
-		err := fmt.Errorf("[createPeer]same peer id from different addr: %s, %s close latest one", ipOld, ipNew)
+		err := fmt.Errorf("[createPeer]same peer id from different id %v addr: %s %s, %s close latest one",
+			peer.Id.ToHexString(),
+			addr, ipOld, ipNew,
+		)
 		self.logger.Warn(err)
 		return err
 	}

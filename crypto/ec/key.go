@@ -71,6 +71,7 @@ func GenerateECKeyPair(c elliptic.Curve, seed io.Reader, alg ECAlgorithm) (*Priv
 	if err != nil {
 		return nil, nil, errors.New("Generate ec key pair failed, " + err.Error())
 	}
+
 	pri := PrivateKey{
 		Algorithm: alg,
 		PrivateKey: &ecdsa.PrivateKey{

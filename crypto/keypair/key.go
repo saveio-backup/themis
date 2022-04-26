@@ -122,6 +122,12 @@ func GenerateKeyPairWithSeed(t KeyType, seed io.Reader, opts interface{}) (Priva
 			return nil, nil, errors.New(err_generate + err.Error())
 		}
 
+		// N := c.Params().N
+		// bitSize := N.BitLen()
+		// byteLen := (bitSize + 7) / 8
+		// var mask = []byte{0xff, 0x1, 0x3, 0x7, 0xf, 0x1f, 0x3f, 0x7f}
+		// fmt.Printf("bitSize %v, bytesLen %v, 8 %v, mask %x\n", bitSize, byteLen, bitSize%8, mask)
+
 		if t == PK_ECDSA {
 			return ec.GenerateECKeyPair(c, seed, ec.ECDSA)
 		} else if t == PK_ECIES {
