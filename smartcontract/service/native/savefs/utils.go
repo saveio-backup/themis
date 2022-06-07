@@ -124,6 +124,7 @@ type UploadOption struct {
 	CopyNum         uint64
 	Encrypt         bool
 	EncryptPassword []byte
+	EncryptNodeAddr []byte
 	RegisterDNS     bool
 	BindDNS         bool
 	DnsURL          []byte
