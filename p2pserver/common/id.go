@@ -35,7 +35,7 @@ import (
 	"github.com/saveio/themis/crypto/keypair"
 )
 
-var Difficulty = 18 //bit
+var Difficulty = 9 //bit
 
 type PeerId struct {
 	val common.Address
