@@ -21,6 +21,7 @@ package keypair
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
 	"errors"
@@ -301,6 +302,15 @@ func GetScryptParameters() *ScryptParam {
 	}
 }
 
+func GetEthPublicKeyFromPrivateKey(privateKey PrivateKey) *ecdsa.PublicKey {
+	ecPrivateKey := privateKey.(*ec.PrivateKey)
+	ecdsaPrivateKey, err := ethCrypto.HexToECDSA(fmt.Sprintf("%x", ecPrivateKey.Raw))
+	if err != nil {
+		return nil
+	}
+	return &ecdsaPrivateKey.PublicKey
+}
+
 func GetEthAddressFromPrivateKey(privateKey PrivateKey) ethComm.Address {
 	ecPrivateKey := privateKey.(*ec.PrivateKey)
 	ecdsaPrivateKey, err := ethCrypto.HexToECDSA(fmt.Sprintf("%x", ecPrivateKey.Raw))
@@ -309,7 +319,6 @@ func GetEthAddressFromPrivateKey(privateKey PrivateKey) ethComm.Address {
 	}
 	ethAddr := ethCrypto.PubkeyToAddress(ecdsaPrivateKey.PublicKey)
 	return ethAddr
-
 }
 
 // // HexToECDSA parses a secp256k1 private key.

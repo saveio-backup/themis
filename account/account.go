@@ -20,7 +20,6 @@ package account
 
 import (
 	"bytes"
-
 	ethComm "github.com/ethereum/go-ethereum/common"
 	ethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/saveio/themis/common"
@@ -103,6 +102,11 @@ func (this *Account) GetEthPrivateKey() []byte {
 
 func (this *Account) GetPublicKey() *ec.PublicKey {
 	return this.PublicKey.(*ec.PublicKey)
+}
+
+func (this *Account) GetEthPublicKey() []byte {
+	pubKey := keypair.GetEthPublicKeyFromPrivateKey(this.PrivateKey)
+	return ethCrypto.FromECDSAPub(pubKey)
 }
 
 func NewAccountWithPrivateKey(privateKey []byte) *Account {
