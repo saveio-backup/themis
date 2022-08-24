@@ -137,3 +137,17 @@ func TestAccountSignTx(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestImportByWallet(t *testing.T) {
+	wallet, err := Open("./keystore.dat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	acc, err := wallet.GetDefaultAccount([]byte("123"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	prvKey := acc.GetEthPrivateKey()
+	fmt.Printf("addr %s\n", acc.Address.ToBase58())
+	fmt.Printf("private key %x\n", prvKey)
+}

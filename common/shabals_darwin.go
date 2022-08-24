@@ -1,8 +1,9 @@
 package common
 
 import (
-	"github.com/moonfruit/go-shabal"
 	"hash"
+
+	"github.com/moonfruit/go-shabal"
 )
 
 // Shabal256
