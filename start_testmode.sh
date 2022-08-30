@@ -1,0 +1,1 @@
+./themis --testmode -p 123 --loglevel=1
