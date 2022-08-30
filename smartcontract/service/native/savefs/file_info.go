@@ -66,6 +66,7 @@ type FileInfo struct {
 	SectorRefs     []SectorRef // store sectors that has reference to this file
 	IsPlotFile     bool
 	PlotInfo       *PlotInfo
+	Url            string
 }
 
 func (this *FileInfo) Serialize(w io.Writer) error {
@@ -155,6 +156,9 @@ func (this *FileInfo) Serialize(w io.Writer) error {
 		if err := this.PlotInfo.Serialize(w); err != nil {
 			return fmt.Errorf("[FileInfo] [PlotInfo:%v] serialize from error:%v", this.PlotInfo, err)
 		}
+	}
+	if err := utils.WriteBytes(w, []byte(this.Url)); err != nil {
+		return fmt.Errorf("[FileInfo] [Url:%v] serialize from error:%v", this.Url, err)
 	}
 	return nil
 }
@@ -262,6 +266,11 @@ func (this *FileInfo) Deserialize(r io.Reader) error {
 		}
 		this.PlotInfo = plotInfo
 	}
+	UrlBytes, err := utils.ReadBytes(r)
+	if err != nil {
+		return fmt.Errorf("[FileInfo] [Url] deserialize from error:%v", err)
+	}
+	this.Url = string(UrlBytes)
 	return nil
 }
 
@@ -297,6 +306,7 @@ func (this *FileInfo) Serialization(sink *common.ZeroCopySink) {
 	if this.IsPlotFile && this.PlotInfo != nil {
 		this.PlotInfo.Serialization(sink)
 	}
+	utils.EncodeString(sink,this.Url)
 }
 
 func (this *FileInfo) Deserialization(source *common.ZeroCopySource) error {
@@ -421,6 +431,11 @@ func (this *FileInfo) Deserialization(source *common.ZeroCopySource) error {
 		}
 		this.PlotInfo = plotInfo
 	}
+	urlByte,err := utils.DecodeBytes(source)
+	if err != nil {
+		return err
+	}
+	this.Url= string(urlByte)
 	return nil
 }
 
