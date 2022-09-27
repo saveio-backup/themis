@@ -312,7 +312,6 @@ func newGetUserspaceChange(native *native.NativeService, userSpaceParams *UserSp
 	// 原来空间已经过期
 	if oldUserspace != nil && oldUserspace.ExpireHeight <= currentHeight {
 		//更新旧空间为当前
-		log.Debug("原来空间已过期")
 		processExpiredUserSpace(oldUserspace, currentHeight)
 	}
 
