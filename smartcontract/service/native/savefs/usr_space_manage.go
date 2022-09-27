@@ -91,7 +91,7 @@ func FsCashUserSpace(native *native.NativeService) ([]byte, error) {
 		return EncRet(false, []byte("[FS UserSpace] FsCashUserSpace DecodeAddress error!")), nil
 	}
 
-	oldUserSpace,state, err := cashUserSpace(native, walletAddr)
+	oldUserSpace, state, err := cashUserSpace(native, walletAddr)
 	if err != nil {
 		return utils.BYTE_FALSE, err
 	}
@@ -105,7 +105,7 @@ func FsCashUserSpace(native *native.NativeService) ([]byte, error) {
 	newUserSpace := &UserSpace{
 		Used:         0,
 		Remain:       0,
-		ExpireHeight: uint64(native.Height) ,
+		ExpireHeight: uint64(native.Height),
 		Balance:      0,
 	}
 	// update userspace
@@ -113,7 +113,7 @@ func FsCashUserSpace(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] FsCashUserSpace setUserSpace  error!")
 	}
 	SetUserSpaceEvent(native, walletAddr, uint64(UserSpaceCash), oldUserSpace.Remain,
-		uint64(UserSpaceCash), oldUserSpace.ExpireHeight - uint64(native.Height))
+		uint64(UserSpaceCash), oldUserSpace.ExpireHeight-uint64(native.Height))
 
 	return utils.BYTE_TRUE, nil
 }
@@ -305,31 +305,28 @@ func newGetUserspaceChange(native *native.NativeService, userSpaceParams *UserSp
 
 	oldUserspace, err := getOldUserSpace(native, userSpaceParams.Owner)
 
-
 	if err != nil {
 		return nil, nil, errors.NewErr("[FS UserSpace] getOldUserSpace error!")
 	}
-	// 原来空间已经过期
+	// old user space expired
 	if oldUserspace != nil && oldUserspace.ExpireHeight <= currentHeight {
-		//更新旧空间为当前
 		processExpiredUserSpace(oldUserspace, currentHeight)
 	}
 
 	// first operate user space or operate a expired space
 	if oldUserspace == nil || oldUserspace.ExpireHeight == currentHeight {
-		// 检查创建参数
 		if err = checkForFirstUserSpaceOperation(fsSetting, userSpaceParams); err != nil {
 			return nil, nil, errors.NewErr("[FS UserSpace] checkForFirstUserSpaceOperation error!")
 		}
 	}
-	//增加空间
+	//add user space
 	return newProcessForUserSpaceOperations(native, userSpaceParams, oldUserspace, fsSetting)
 }
 func cashUserSpace(native *native.NativeService, address common.Address) (*UserSpace, *usdt.State, error) {
 
-	oldUserspace,err := getOldUserSpace(native, address)
+	oldUserspace, err := getOldUserSpace(native, address)
 	if err != nil {
-		return nil,nil, errors.NewErr("[FS UserSpace] getOldUserSpace error!")
+		return nil, nil, errors.NewErr("[FS UserSpace] getOldUserSpace error!")
 	}
 	contract := native.ContextRef.CurrentContext().ContractAddress
 	fsSetting, err := getFsSetting(native)
@@ -337,14 +334,14 @@ func cashUserSpace(native *native.NativeService, address common.Address) (*UserS
 		return nil, nil, errors.NewErr("[FS UserSpace] getFsSetting error!")
 	}
 	currentHeight := uint64(native.Height)
-	//获取到余额
-	fee := newCalcFee(CashSpace,oldUserspace,fsSetting, fsSetting.DefaultCopyNum, 0, 0,currentHeight)
+
+	fee := newCalcFee(CashSpace, oldUserspace, fsSetting, fsSetting.DefaultCopyNum, 0, 0, currentHeight)
 
 	// transfer state
 	state := &usdt.State{}
-		state.From = contract
-		state.To = address
-		state.Value = fee.Sum()
+	state.From = contract
+	state.To = address
+	state.Value = fee.Sum()
 
 	return oldUserspace, state, nil
 }
@@ -659,15 +656,15 @@ func newFsAddUserSpace(oldUserspace *UserSpace,
 	*UserSpace, uint64, error) {
 	// create user space
 	if oldUserspace == nil {
-		newUserSpace,_:= newCalcDepositFeeForUserSpace(nil,addSize,addBlockCount, fsSetting, uint32(currentHeight))
+		newUserSpace, _ := newCalcDepositFeeForUserSpace(nil, addSize, addBlockCount, fsSetting, uint32(currentHeight))
 		return newUserSpace, newUserSpace.Balance, nil
 	} else {
 		log.Debugf("add user space: old.used:%d, remain:%d, expired:%d, balance:%d, updated:%d",
 			oldUserspace.Used, oldUserspace.Remain, oldUserspace.ExpireHeight,
 			oldUserspace.Balance, oldUserspace.UpdateHeight)
-		log.Debugf("addSize:%d addBlockCount:%d",addSize,addBlockCount)
+		log.Debugf("addSize:%d addBlockCount:%d", addSize, addBlockCount)
 		// fee from now to new expire height with added size
-		newUserSpace,deposit:= newCalcDepositFeeForUserSpace(oldUserspace,addSize,addBlockCount, fsSetting, uint32(currentHeight))
+		newUserSpace, deposit := newCalcDepositFeeForUserSpace(oldUserspace, addSize, addBlockCount, fsSetting, uint32(currentHeight))
 		log.Debugf("new user space: new.used:%d, remain:%d, expired:%d, balance:%d, updated:%d",
 			newUserSpace.Used, newUserSpace.Remain, newUserSpace.ExpireHeight,
 			newUserSpace.Balance, newUserSpace.UpdateHeight)

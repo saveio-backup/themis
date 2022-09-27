@@ -84,9 +84,9 @@ func calcDepositFee(uploadInfo *UploadOption, setting *FsSetting, currentHeight 
 
 	return fee
 }
-func newCalcDepositFee(userSpace *UserSpace, addHeight uint64, addSize uint64, setting *FsSetting, currentHeight uint32) (*UserSpace,uint64) {
-	//新建
-	if userSpace == nil{
+func newCalcDepositFee(userSpace *UserSpace, addHeight uint64, addSize uint64, setting *FsSetting, currentHeight uint32) (*UserSpace, uint64) {
+	//create new user space
+	if userSpace == nil {
 		userSpace = &UserSpace{
 			Used:         0,
 			Remain:       0,
@@ -94,12 +94,13 @@ func newCalcDepositFee(userSpace *UserSpace, addHeight uint64, addSize uint64, s
 			Balance:      0,
 		}
 	}
-	fee := newCalcFee(AddSpace,userSpace,setting, setting.DefaultCopyNum, addSize, addHeight,uint64(currentHeight))
-	userSpace.Remain +=addSize
+	fee := newCalcFee(AddSpace, userSpace, setting, setting.DefaultCopyNum, addSize, addHeight, uint64(currentHeight))
+	userSpace.Remain += addSize
 	userSpace.ExpireHeight += addHeight
 	userSpace.Balance += fee.Sum()
-	return userSpace,fee.Sum()
+	return userSpace, fee.Sum()
 }
+
 // calculate the userspace deposit like the whole space is used by a single file
 func calcDepositFeeForUserSpace(userspace *UserSpace, setting *FsSetting, currentHeight uint32) *StorageFee {
 	uploadOpt := &UploadOption{
@@ -111,10 +112,11 @@ func calcDepositFeeForUserSpace(userspace *UserSpace, setting *FsSetting, curren
 
 	return calcDepositFee(uploadOpt, setting, currentHeight)
 }
-// calculate the userspace deposit like the whole space is used by a single file
-func newCalcDepositFeeForUserSpace(userspace *UserSpace,addSize uint64,addBlockCount uint64, setting *FsSetting, currentHeight uint32) (*UserSpace,uint64){
 
-	return newCalcDepositFee(userspace,addBlockCount,addSize,  setting, currentHeight)
+// calculate the userspace deposit like the whole space is used by a single file
+func newCalcDepositFeeForUserSpace(userspace *UserSpace, addSize uint64, addBlockCount uint64, setting *FsSetting, currentHeight uint32) (*UserSpace, uint64) {
+
+	return newCalcDepositFee(userspace, addBlockCount, addSize, setting, currentHeight)
 }
 func calcProveTimesByUploadInfo(uploadInfo *UploadOption, beginHeight uint32) uint64 {
 	if uploadInfo.ProveInterval == 0 {
@@ -126,7 +128,7 @@ func calcProveTimesByUploadInfo(uploadInfo *UploadOption, beginHeight uint32) ui
 
 	return (uploadInfo.ExpiredHeight-uint64(beginHeight))/uploadInfo.ProveInterval + 1
 }
-func newCalcProveTimesByUploadInfo(uploadInfo *UploadOption,addHeight uint64) uint64 {
+func newCalcProveTimesByUploadInfo(uploadInfo *UploadOption, addHeight uint64) uint64 {
 	if uploadInfo.ProveInterval == 0 {
 		if (uploadInfo.ProveLevel) == 0 {
 			uploadInfo.ProveLevel = DeFAULT_PROVE_LEVEL
@@ -134,7 +136,7 @@ func newCalcProveTimesByUploadInfo(uploadInfo *UploadOption,addHeight uint64) ui
 		//uploadInfo.ProveInterval  默认 = 17280
 		uploadInfo.ProveInterval = GetProveIntervalByProveLevel(uploadInfo.ProveLevel)
 	}
-	log.Debugf("valid blockCount: %d",addHeight)
+	log.Debugf("valid blockCount: %d", addHeight)
 	return addHeight/uploadInfo.ProveInterval + 1
 }
 
@@ -157,12 +159,12 @@ func calcFee(setting *FsSetting, proveTime, copyNum, fileSize, duration uint64) 
 		SpaceFee:      storageFee,
 	}
 }
-func newCalcFee(changeSpaceType int, userSpace *UserSpace,setting *FsSetting, copyNum, addSize, addHeight uint64, currentHeight uint64) *StorageFee {
+func newCalcFee(changeSpaceType int, userSpace *UserSpace, setting *FsSetting, copyNum, addSize, addHeight uint64, currentHeight uint64) *StorageFee {
 	fee := &StorageFee{
 		ValidationFee: 0,
 		SpaceFee:      0,
 	}
-	//增加的fileSize 和增加的块的高度
+
 	uploadInfo := &UploadOption{
 		FileSize:      userSpace.Used + userSpace.Remain,
 		ProveInterval: setting.DefaultProvePeriod,
@@ -171,61 +173,54 @@ func newCalcFee(changeSpaceType int, userSpace *UserSpace,setting *FsSetting, co
 	}
 	switch changeSpaceType {
 	case AddSpace:
-		//添加时间小于等于零 即只调整空间 当前-未来的时间 增加空间
-		if addHeight <= 0{
+		if addHeight <= 0 {
 			log.Info("only add space ")
 			// fileSize unit is kb
 			if addSize <= 0 {
 				addSize = 1
 			}
-			proveTime := newCalcProveTimesByUploadInfo(uploadInfo, userSpace.ExpireHeight - currentHeight )
+			proveTime := newCalcProveTimesByUploadInfo(uploadInfo, userSpace.ExpireHeight-currentHeight)
 			fee.ValidationFee = calcValidFee(setting, proveTime, copyNum, addSize)
-			fee.SpaceFee = calcStorageFee(setting, copyNum, addSize, userSpace.ExpireHeight - currentHeight )
+			fee.SpaceFee = calcStorageFee(setting, copyNum, addSize, userSpace.ExpireHeight-currentHeight)
 			log.Debugf("proveTime :%d, validFee :%d, storageFee: %d, addSize: %d ", proveTime, fee.ValidationFee, fee.SpaceFee, addSize)
 			return fee
 		}
-		//添加空间小于等于零 即只调整时间 原来的空间大小 顺延时间
-		if addSize <= 0{
+		if addSize <= 0 {
 			log.Info("only add time ")
 			// fileSize unit is kb
 			if addSize <= 0 {
 				addSize = 1
 			}
-			proveTime := newCalcProveTimesByUploadInfo(uploadInfo,addHeight)
+			proveTime := newCalcProveTimesByUploadInfo(uploadInfo, addHeight)
 			fee.ValidationFee = calcValidFee(setting, proveTime, copyNum, userSpace.Remain+userSpace.Used)
-			fee.SpaceFee = calcStorageFee(setting, copyNum, userSpace.Used+userSpace.Remain, addHeight )
+			fee.SpaceFee = calcStorageFee(setting, copyNum, userSpace.Used+userSpace.Remain, addHeight)
 			log.Debugf("proveTime :%d, validFee :%d, storageFee: %d, addHeight: %d ", proveTime, fee.ValidationFee, fee.SpaceFee, addHeight)
 			return fee
 		}
-		//即改变时间 也改变空间
+
 		if addSize <= 0 {
 			addSize = 1
 		}
 		log.Info("add space and time ")
-		//1.当前-到之前设置的时间
-		//在  userSpace.ExpireHeight - currentHeight 这个区间里
-		//验证费
-		proveTime := newCalcProveTimesByUploadInfo(uploadInfo,userSpace.ExpireHeight - currentHeight)
+		//currentHeight to expireHeight
+		proveTime := newCalcProveTimesByUploadInfo(uploadInfo, userSpace.ExpireHeight-currentHeight)
 		validationFee1 := calcValidFee(setting, proveTime, copyNum, addSize)
-		//存储费
-		spaceFee1 := calcStorageFee(setting, copyNum, addSize, userSpace.ExpireHeight - currentHeight )
-		//2.未来-当前
-		//验证费用
-		proveTime = newCalcProveTimesByUploadInfo(uploadInfo,addHeight)
-		validationFee2 := calcValidFee(setting, proveTime, copyNum, userSpace.Used+userSpace.Remain +addSize)
-		//存储费
-		spaceFee2:= calcStorageFee(setting, copyNum, userSpace.Used+userSpace.Remain + addSize, addHeight )
-		fee.ValidationFee = validationFee1+validationFee2
-		fee.SpaceFee = spaceFee1+spaceFee2
 
-		log.Debugf("proveTime :%d, validFee :%d, storageFee: %d, addHeight: %d,addSize: %d", proveTime, fee.ValidationFee, fee.SpaceFee, addHeight,addSize)
+		spaceFee1 := calcStorageFee(setting, copyNum, addSize, userSpace.ExpireHeight-currentHeight)
+		//2.new expireHeight to expireHeight
+		proveTime = newCalcProveTimesByUploadInfo(uploadInfo, addHeight)
+		validationFee2 := calcValidFee(setting, proveTime, copyNum, userSpace.Used+userSpace.Remain+addSize)
+		spaceFee2 := calcStorageFee(setting, copyNum, userSpace.Used+userSpace.Remain+addSize, addHeight)
+		fee.ValidationFee = validationFee1 + validationFee2
+		fee.SpaceFee = spaceFee1 + spaceFee2
+
+		log.Debugf("proveTime :%d, validFee :%d, storageFee: %d, addHeight: %d,addSize: %d", proveTime, fee.ValidationFee, fee.SpaceFee, addHeight, addSize)
 
 		return fee
 	case CashSpace:
-		//
-		proveTime := newCalcProveTimesByUploadInfo(uploadInfo,userSpace.Remain)
-		fee.ValidationFee = calcValidFee(setting,proveTime,copyNum,userSpace.Remain)
-		fee.SpaceFee = calcStorageFee(setting,copyNum,userSpace.Remain,userSpace.ExpireHeight - currentHeight)
+		proveTime := newCalcProveTimesByUploadInfo(uploadInfo, userSpace.Remain)
+		fee.ValidationFee = calcValidFee(setting, proveTime, copyNum, userSpace.Remain)
+		fee.SpaceFee = calcStorageFee(setting, copyNum, userSpace.Remain, userSpace.ExpireHeight-currentHeight)
 		return fee
 	case ReduceSpace:
 		return fee
