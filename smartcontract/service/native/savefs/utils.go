@@ -361,7 +361,6 @@ func GenPocProveListKey(contract common.Address, height uint64) []byte {
 }
 
 func appCallTransfer(native *native.NativeService, contract common.Address, from common.Address, to common.Address, amount uint64) error {
-	log.Debug("appCallTransfer 方法")
 	var sts []usdt.State
 	sts = append(sts, usdt.State{
 		From:  from,
