@@ -63,6 +63,8 @@ const (
 	FS_FILE_RENEW                      = "FsFileRenew"
 	FS_CHANGE_FILE_PRIVILEGE           = "FsChangeFilePrivilege"
 	FS_MANAGE_USER_SPACE               = "FsManageUserSpace"
+	NEW_FS_MANAGE_USER_SPACE           = "NewFsManageUserSpace"
+	FS_CASH_USER_SPACE				   ="FsCashUserSpace"
 	FS_GET_USER_SPACE                  = "FsGetUserSpace"
 	FS_GET_USER_SPACE_COST             = "FsGetUpdateCost"
 	FS_DELETE_USER_SPACE               = "FsDeleteUserSpace"
@@ -359,6 +361,7 @@ func GenPocProveListKey(contract common.Address, height uint64) []byte {
 }
 
 func appCallTransfer(native *native.NativeService, contract common.Address, from common.Address, to common.Address, amount uint64) error {
+	log.Debug("appCallTransfer 方法")
 	var sts []usdt.State
 	sts = append(sts, usdt.State{
 		From:  from,
@@ -370,7 +373,6 @@ func appCallTransfer(native *native.NativeService, contract common.Address, from
 	}
 	sink := common.NewZeroCopySink(nil)
 	transfers.Serialization(sink)
-
 	if _, err := native.NativeCall(contract, "transfer", sink.Bytes()); err != nil {
 		return errors.NewDetailErr(err, errors.ErrNoCode, "appCallTransfer, appCall error!")
 	}

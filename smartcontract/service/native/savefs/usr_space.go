@@ -112,6 +112,7 @@ const (
 	UserSpaceNone UserSpaceType = iota
 	UserSpaceAdd
 	UserSpaceRevoke
+	UserSpaceCash
 )
 
 type UserSpaceOperation struct {

@@ -50,8 +50,75 @@ func FsManageUserSpace(native *native.NativeService) ([]byte, error) {
 	return utils.BYTE_TRUE, nil
 }
 
+func NewFsManageUserSpace(native *native.NativeService) ([]byte, error) {
+	log.Debugf("NewFsManageUserSpace height %d\n", native.Height)
+
+	var userSpaceParams UserSpaceParams
+	source := common.NewZeroCopySource(native.Input)
+	if err := userSpaceParams.Deserialization(source); err != nil {
+		return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] userSpaceParams deserialize error!")
+	}
+	if !native.ContextRef.CheckWitness(userSpaceParams.WalletAddr) {
+		return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] NewFsManageUserSpace CheckWitness failed!")
+	}
+	newUserSpace, state, err := newGetUserspaceChange(native, &userSpaceParams)
+	if err != nil {
+		return utils.BYTE_FALSE, err
+	}
+	if state.Value > 0 {
+		err = appCallTransfer(native, utils.UsdtContractAddress, state.From, state.To, state.Value)
+		if err != nil {
+			return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] NewFsManageUserSpace AppCallTransfer, transfer error!")
+		}
+	}
+	// update userspace
+	if err = setUserSpace(native, newUserSpace, userSpaceParams.Owner); err != nil {
+		return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] NewFsManageUserSpace setUserSpace  error!")
+	}
+
+	log.Debugf("owner :%s, size %v, block count: %v\n",
+		userSpaceParams.Owner.ToBase58(), userSpaceParams.Size, userSpaceParams.BlockCount)
+	SetUserSpaceEvent(native, userSpaceParams.WalletAddr, userSpaceParams.Size.Type, userSpaceParams.Size.Value,
+		userSpaceParams.BlockCount.Type, userSpaceParams.BlockCount.Value)
+
+	return utils.BYTE_TRUE, nil
+}
+func FsCashUserSpace(native *native.NativeService) ([]byte, error) {
+	log.Debug("FsCashUserSpace")
+	source := common.NewZeroCopySource(native.Input)
+	walletAddr, err := utils.DecodeAddress(source)
+	if err != nil {
+		return EncRet(false, []byte("[FS UserSpace] FsCashUserSpace DecodeAddress error!")), nil
+	}
+
+	oldUserSpace,state, err := cashUserSpace(native, walletAddr)
+	if err != nil {
+		return utils.BYTE_FALSE, err
+	}
+	if state.Value > 0 {
+		err = appCallTransfer(native, utils.UsdtContractAddress, state.From, state.To, state.Value)
+		if err != nil {
+			return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] NewFsManageUserSpace AppCallTransfer, transfer error!")
+		}
+	}
+
+	newUserSpace := &UserSpace{
+		Used:         0,
+		Remain:       0,
+		ExpireHeight: uint64(native.Height) ,
+		Balance:      0,
+	}
+	// update userspace
+	if err = setUserSpace(native, newUserSpace, walletAddr); err != nil {
+		return utils.BYTE_FALSE, errors.NewErr("[FS UserSpace] FsCashUserSpace setUserSpace  error!")
+	}
+	SetUserSpaceEvent(native, walletAddr, uint64(UserSpaceCash), oldUserSpace.Remain,
+		uint64(UserSpaceCash), oldUserSpace.ExpireHeight - uint64(native.Height))
+
+	return utils.BYTE_TRUE, nil
+}
 func FsGetUpdateCost(native *native.NativeService) ([]byte, error) {
-	_, state, _, err := getUserspaceChange(native, nil)
+	_, state, err := newGetUserspaceChange(native, nil)
 	if err != nil {
 		log.Errorf("get user space change err %s", err)
 		return EncRet(false, []byte(err.Error())), nil
@@ -213,6 +280,75 @@ func getUserspaceChange(native *native.NativeService, userSpaceParams *UserSpace
 
 	return processForUserSpaceOperations(native, userSpaceParams, oldUserspace, fsSetting)
 }
+func newGetUserspaceChange(native *native.NativeService, userSpaceParams *UserSpaceParams) (*UserSpace, *usdt.State, error) {
+	currentHeight := uint64(native.Height)
+
+	if userSpaceParams == nil {
+		var params UserSpaceParams
+		source := common.NewZeroCopySource(native.Input)
+		if err := params.Deserialization(source); err != nil {
+			return nil, nil, errors.NewErr("[FS UserSpace] userSpaceParams deserialize error!")
+		}
+		userSpaceParams = &params
+	}
+
+	fsSetting, err := getFsSetting(native)
+	if err != nil {
+		return nil, nil, errors.NewErr("[FS UserSpace] getFsSetting error!")
+	}
+
+	log.Debugf("change user space wallet addr: %v", userSpaceParams.WalletAddr.ToBase58())
+
+	if err := checkUserSpaceParams(native, userSpaceParams); err != nil {
+		return nil, nil, errors.NewErr("[FS UserSpace] checkUserSpaceParams error!")
+	}
+
+	oldUserspace, err := getOldUserSpace(native, userSpaceParams.Owner)
+
+
+	if err != nil {
+		return nil, nil, errors.NewErr("[FS UserSpace] getOldUserSpace error!")
+	}
+	// 原来空间已经过期
+	if oldUserspace != nil && oldUserspace.ExpireHeight <= currentHeight {
+		//更新旧空间为当前
+		log.Debug("原来空间已过期")
+		processExpiredUserSpace(oldUserspace, currentHeight)
+	}
+
+	// first operate user space or operate a expired space
+	if oldUserspace == nil || oldUserspace.ExpireHeight == currentHeight {
+		// 检查创建参数
+		if err = checkForFirstUserSpaceOperation(fsSetting, userSpaceParams); err != nil {
+			return nil, nil, errors.NewErr("[FS UserSpace] checkForFirstUserSpaceOperation error!")
+		}
+	}
+	//增加空间
+	return newProcessForUserSpaceOperations(native, userSpaceParams, oldUserspace, fsSetting)
+}
+func cashUserSpace(native *native.NativeService, address common.Address) (*UserSpace, *usdt.State, error) {
+
+	oldUserspace,err := getOldUserSpace(native, address)
+	if err != nil {
+		return nil,nil, errors.NewErr("[FS UserSpace] getOldUserSpace error!")
+	}
+	contract := native.ContextRef.CurrentContext().ContractAddress
+	fsSetting, err := getFsSetting(native)
+	if err != nil {
+		return nil, nil, errors.NewErr("[FS UserSpace] getFsSetting error!")
+	}
+	currentHeight := uint64(native.Height)
+	//获取到余额
+	fee := newCalcFee(CashSpace,oldUserspace,fsSetting, fsSetting.DefaultCopyNum, 0, 0,currentHeight)
+
+	// transfer state
+	state := &usdt.State{}
+		state.From = contract
+		state.To = address
+		state.Value = fee.Sum()
+
+	return oldUserspace, state, nil
+}
 
 func checkUserSpaceParams(native *native.NativeService, userSpaceParams *UserSpaceParams) error {
 	if userSpaceParams.Size.Value == 0 && userSpaceParams.BlockCount.Value == 0 {
@@ -351,6 +487,65 @@ func processForUserSpaceOperations(native *native.NativeService, userSpaceParams
 	}
 	return newUserSpace, state, updatedFiles, nil
 }
+func newProcessForUserSpaceOperations(native *native.NativeService, userSpaceParams *UserSpaceParams,
+	oldUserspace *UserSpace, fsSetting *FsSetting) (*UserSpace, *usdt.State, error) {
+	contract := native.ContextRef.CurrentContext().ContractAddress
+
+	var newUserSpace *UserSpace
+	var transferIn, transferOut uint64
+	var err error
+
+	currentHeight := uint64(native.Height)
+
+	if oldUserspace != nil {
+		log.Debugf("oldUserspace.used: %d, remain: %d, expired: %d, balance: %d",
+			oldUserspace.Used, oldUserspace.Remain, oldUserspace.ExpireHeight, oldUserspace.Balance)
+	} else {
+		log.Debugf("oldUserspace not found")
+	}
+
+	userSpaceOps, _ := getUserSpaceOperationsFromParams(userSpaceParams)
+	switch userSpaceOps {
+	// at least one add, no revoke
+	case UserspaceOps_Add_Add, UserspaceOps_Add_None, UserspaceOps_None_Add:
+		newUserSpace, transferIn, err = newFsAddUserSpace(oldUserspace, userSpaceParams.Size.Value,
+			userSpaceParams.BlockCount.Value, currentHeight, fsSetting)
+		if err != nil {
+			return nil, nil, err
+		}
+		// at least one revoke no add
+	case UserspaceOps_Revoke_Revoke, UserspaceOps_None_Revoke, UserspaceOps_Revoke_None:
+		return nil, nil, errors.NewErr("userspace revoke revoke function not implemented")
+	case UserspaceOps_Add_Revoke, UserspaceOps_Revoke_Add:
+		return nil, nil, errors.NewErr("userspace add revoke function not implemented")
+	default:
+		return nil, nil, errors.NewErr("invalid userspace operation")
+	}
+
+	if newUserSpace == nil {
+		return nil, nil, errors.NewErr("new user space is nil")
+	}
+
+	newUserSpace.UpdateHeight = uint64(native.Height)
+
+	log.Debugf("transfer in %d, out: %d, newuserspace.used: %d, remain: %d, expired: %d, balance: %d, height: %d",
+		transferIn, transferOut,
+		newUserSpace.Used, newUserSpace.Remain, newUserSpace.ExpireHeight,
+		newUserSpace.Balance, newUserSpace.UpdateHeight)
+
+	// transfer state
+	state := &usdt.State{}
+	if transferIn >= transferOut {
+		state.From = userSpaceParams.WalletAddr
+		state.To = contract
+		state.Value = transferIn - transferOut
+	} else {
+		state.From = contract
+		state.To = userSpaceParams.WalletAddr
+		state.Value = transferOut - transferIn
+	}
+	return newUserSpace, state, nil
+}
 
 func processForUserSpaceOneAddOneRevoke(native *native.NativeService, userSpaceParams *UserSpaceParams,
 	oldUserspace *UserSpace, fsSetting *FsSetting, fileList *FileList, ops uint64) (*UserSpace, uint64, uint64, []*FileInfo, error) {
@@ -458,6 +653,26 @@ func fsAddUserSpace(native *native.NativeService, oldUserspace *UserSpace,
 		}
 
 		return newUserSpace, deposit, updatedFiles, nil
+	}
+}
+func newFsAddUserSpace(oldUserspace *UserSpace,
+	addSize, addBlockCount, currentHeight uint64, fsSetting *FsSetting) (
+	*UserSpace, uint64, error) {
+	// create user space
+	if oldUserspace == nil {
+		newUserSpace,_:= newCalcDepositFeeForUserSpace(nil,addSize,addBlockCount, fsSetting, uint32(currentHeight))
+		return newUserSpace, newUserSpace.Balance, nil
+	} else {
+		log.Debugf("add user space: old.used:%d, remain:%d, expired:%d, balance:%d, updated:%d",
+			oldUserspace.Used, oldUserspace.Remain, oldUserspace.ExpireHeight,
+			oldUserspace.Balance, oldUserspace.UpdateHeight)
+		log.Debugf("addSize:%d addBlockCount:%d",addSize,addBlockCount)
+		// fee from now to new expire height with added size
+		newUserSpace,deposit:= newCalcDepositFeeForUserSpace(oldUserspace,addSize,addBlockCount, fsSetting, uint32(currentHeight))
+		log.Debugf("new user space: new.used:%d, remain:%d, expired:%d, balance:%d, updated:%d",
+			newUserSpace.Used, newUserSpace.Remain, newUserSpace.ExpireHeight,
+			newUserSpace.Balance, newUserSpace.UpdateHeight)
+		return newUserSpace, deposit, nil
 	}
 }
 

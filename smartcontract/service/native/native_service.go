@@ -20,7 +20,6 @@ package native
 
 import (
 	"fmt"
-
 	"github.com/saveio/themis/common"
 	"github.com/saveio/themis/core/store"
 	"github.com/saveio/themis/core/types"
