@@ -327,6 +327,7 @@ func (this *ClientImpl) getAccount(accData *AccountData, passwd []byte) (*Accoun
 	}
 	publicKey := privateKey.Public()
 	addr := types.AddressFromPubKey(publicKey)
+	ethAddress := keypair.GetEthAddressFromPrivateKey(privateKey)
 	scheme, err := s.GetScheme(accData.SigSch)
 	if err != nil {
 		return nil, fmt.Errorf("signature scheme error: %s", err)
@@ -335,6 +336,7 @@ func (this *ClientImpl) getAccount(accData *AccountData, passwd []byte) (*Accoun
 		PrivateKey: privateKey,
 		PublicKey:  publicKey,
 		Address:    addr,
+		EthAddress: ethAddress,
 		SigScheme:  scheme,
 	}, nil
 }
