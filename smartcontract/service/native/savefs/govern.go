@@ -339,7 +339,7 @@ func FsFileProve(native *native.NativeService) ([]byte, error) {
 			if haveProveTimes > fileInfo.ProveTimes {
 				return utils.BYTE_FALSE, errors.NewErr("[FS Govern] FsFileProve Prove times reached limit!")
 			}
-			if !checkProveExpire(native, haveProveTimes, fileInfo.ProveInterval, firstProveHeight, fileExpiredHeight) {
+			if checkProveExpire(native, haveProveTimes, fileInfo.ProveInterval, firstProveHeight, fileExpiredHeight) {
 				return utils.BYTE_FALSE, errors.NewErr("[FS Govern] FsFileProve Prove out of date!")
 			}
 			proveDetail.ProveTimes++

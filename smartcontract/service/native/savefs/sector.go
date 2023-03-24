@@ -3,6 +3,7 @@ package savefs
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/saveio/themis/core/types"
 
 	"github.com/saveio/themis/common"
@@ -195,7 +196,7 @@ func FsSectorProve(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, errors.NewErr("[CreateSector] NodeInfo not found!")
 	}
 
-	sectorInfo, err := getSectorInfo(native, sectorProve.NodeAddr, sectorProve.SectorID)
+	sectorInfo, err := getSectorInfoWithFileList(native, sectorProve.NodeAddr, sectorProve.SectorID)
 	if err != nil {
 		return utils.BYTE_FALSE, errors.NewErr("[SectorProve] Sector not exist!")
 	}
