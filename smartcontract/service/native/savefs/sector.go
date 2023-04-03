@@ -525,7 +525,8 @@ func profitSplitForSector(native *native.NativeService, sectorInfo *SectorInfo, 
 
 		fileInfo, err := getFsFileInfo(native, fileHash)
 		if err != nil {
-			return errors.NewErr("[SectorProve] fileInfo not found!")
+			deleteFileFromSector(native, sectorInfo, fileInfo)
+			continue
 		}
 
 		proveDetails, err := getProveDetails(native, fileHash)
