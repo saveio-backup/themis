@@ -174,7 +174,7 @@ func newCalcFee(changeSpaceType int, userSpace *UserSpace, setting *FsSetting, c
 	switch changeSpaceType {
 	case AddSpace:
 		if addHeight <= 0 {
-			log.Info("only add space ")
+			log.Info("only add space,ExpireHeight >= currentHeight")
 			// fileSize unit is kb
 			if addSize <= 0 {
 				addSize = 1
@@ -186,7 +186,7 @@ func newCalcFee(changeSpaceType int, userSpace *UserSpace, setting *FsSetting, c
 			return fee
 		}
 		if addSize <= 0 {
-			log.Info("only add time ")
+			log.Info("only add time")
 			// fileSize unit is kb
 			if addSize <= 0 {
 				addSize = 1
@@ -198,29 +198,39 @@ func newCalcFee(changeSpaceType int, userSpace *UserSpace, setting *FsSetting, c
 			return fee
 		}
 
+		log.Info("add space and time ")
 		if addSize <= 0 {
 			addSize = 1
 		}
-		log.Info("add space and time ")
-		//currentHeight to expireHeight
-		proveTime := newCalcProveTimesByUploadInfo(uploadInfo, userSpace.ExpireHeight-currentHeight)
-		validationFee1 := calcValidFee(setting, proveTime, copyNum, addSize)
+		validationFee1 := uint64(0)
+		spaceFee1 := uint64(0)
+		// if ExpireHeight == currentHeight return error value 600
+		if userSpace.ExpireHeight > currentHeight {
+			//currentHeight to expireHeight
+			proveTime := newCalcProveTimesByUploadInfo(uploadInfo, userSpace.ExpireHeight-currentHeight)
+			validationFee1 = calcValidFee(setting, proveTime, copyNum, addSize)
+			spaceFee1 = calcStorageFee(setting, copyNum, addSize, userSpace.ExpireHeight-currentHeight)
+		}
 
-		spaceFee1 := calcStorageFee(setting, copyNum, addSize, userSpace.ExpireHeight-currentHeight)
+		log.Debug("validationFee1:%v", validationFee1)
+		log.Debug("spaceFee1:%v", spaceFee1)
 		//2.new expireHeight to expireHeight
-		proveTime = newCalcProveTimesByUploadInfo(uploadInfo, addHeight)
+		proveTime := newCalcProveTimesByUploadInfo(uploadInfo, addHeight)
 		validationFee2 := calcValidFee(setting, proveTime, copyNum, userSpace.Used+userSpace.Remain+addSize)
 		spaceFee2 := calcStorageFee(setting, copyNum, userSpace.Used+userSpace.Remain+addSize, addHeight)
+		log.Debug("validationFee2:%v", validationFee2)
+		log.Debug("spaceFee2:%v", spaceFee2)
 		fee.ValidationFee = validationFee1 + validationFee2
 		fee.SpaceFee = spaceFee1 + spaceFee2
 
-		log.Debugf("proveTime :%d, validFee :%d, storageFee: %d, addHeight: %d,addSize: %d", proveTime, fee.ValidationFee, fee.SpaceFee, addHeight, addSize)
+		log.Debugf("proveTime :%d, validFee:%d, storageFee: %d, addHeight: %d,addSize: %d", proveTime, fee.ValidationFee, fee.SpaceFee, addHeight, addSize)
 
 		return fee
 	case CashSpace:
-		proveTime := newCalcProveTimesByUploadInfo(uploadInfo, userSpace.Remain)
+		proveTime := newCalcProveTimesByUploadInfo(uploadInfo, userSpace.ExpireHeight-currentHeight)
 		fee.ValidationFee = calcValidFee(setting, proveTime, copyNum, userSpace.Remain)
 		fee.SpaceFee = calcStorageFee(setting, copyNum, userSpace.Remain, userSpace.ExpireHeight-currentHeight)
+		log.Debug("cash space fee validFee:%v, storageFee:%v", fee.ValidationFee, fee.SpaceFee)
 		return fee
 	case ReduceSpace:
 		return fee

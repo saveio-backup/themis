@@ -84,7 +84,6 @@ func NewFsManageUserSpace(native *native.NativeService) ([]byte, error) {
 	return utils.BYTE_TRUE, nil
 }
 func FsCashUserSpace(native *native.NativeService) ([]byte, error) {
-	log.Debug("FsCashUserSpace")
 	source := common.NewZeroCopySource(native.Input)
 	walletAddr, err := utils.DecodeAddress(source)
 	if err != nil {
@@ -282,7 +281,6 @@ func getUserspaceChange(native *native.NativeService, userSpaceParams *UserSpace
 }
 func newGetUserspaceChange(native *native.NativeService, userSpaceParams *UserSpaceParams) (*UserSpace, *usdt.State, error) {
 	currentHeight := uint64(native.Height)
-
 	if userSpaceParams == nil {
 		var params UserSpaceParams
 		source := common.NewZeroCopySource(native.Input)
@@ -302,7 +300,6 @@ func newGetUserspaceChange(native *native.NativeService, userSpaceParams *UserSp
 	if err := checkUserSpaceParams(native, userSpaceParams); err != nil {
 		return nil, nil, errors.NewErr("[FS UserSpace] checkUserSpaceParams error!")
 	}
-
 	oldUserspace, err := getOldUserSpace(native, userSpaceParams.Owner)
 
 	if err != nil {
@@ -323,7 +320,6 @@ func newGetUserspaceChange(native *native.NativeService, userSpaceParams *UserSp
 	return newProcessForUserSpaceOperations(native, userSpaceParams, oldUserspace, fsSetting)
 }
 func cashUserSpace(native *native.NativeService, address common.Address) (*UserSpace, *usdt.State, error) {
-
 	oldUserspace, err := getOldUserSpace(native, address)
 	if err != nil {
 		return nil, nil, errors.NewErr("[FS UserSpace] getOldUserSpace error!")
@@ -334,7 +330,6 @@ func cashUserSpace(native *native.NativeService, address common.Address) (*UserS
 		return nil, nil, errors.NewErr("[FS UserSpace] getFsSetting error!")
 	}
 	currentHeight := uint64(native.Height)
-
 	fee := newCalcFee(CashSpace, oldUserspace, fsSetting, fsSetting.DefaultCopyNum, 0, 0, currentHeight)
 
 	// transfer state
@@ -373,11 +368,9 @@ func checkForFirstUserSpaceOperation(fsSetting *FsSetting, userSpaceParams *User
 	if err != nil {
 		return err
 	}
-
 	if ops != UserspaceOps_Add_Add {
 		return errors.NewErr("[FS UserSpace] nothing happen")
 	}
-
 	if userSpaceParams.Size.Value == 0 || userSpaceParams.BlockCount.Value == 0 {
 		return errors.NewErr("[FS UserSpace]  size and block count should both bigger than 0 first time")
 	}
@@ -656,6 +649,7 @@ func newFsAddUserSpace(oldUserspace *UserSpace,
 	*UserSpace, uint64, error) {
 	// create user space
 	if oldUserspace == nil {
+		log.Debugf("new add userspace addSize:%v addBlockCount:%v", addSize, addBlockCount)
 		newUserSpace, _ := newCalcDepositFeeForUserSpace(nil, addSize, addBlockCount, fsSetting, uint32(currentHeight))
 		return newUserSpace, newUserSpace.Balance, nil
 	} else {
