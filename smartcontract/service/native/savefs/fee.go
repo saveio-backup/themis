@@ -53,7 +53,7 @@ func (this *StorageFee) Deserialize(r io.Reader) error {
 
 func calcUploadFee(uploadInfo *UploadOption, setting *FsSetting, currentHeight uint32) *StorageFee {
 	fee := uint64(0)
-	txGas := uint64(10000000)
+	txGas := uint64(FS_GAS_PRICE * FS_GAS_LIMIT)
 	if uploadInfo.WhiteList.Num > 0 {
 		fee = txGas * 4
 	} else {

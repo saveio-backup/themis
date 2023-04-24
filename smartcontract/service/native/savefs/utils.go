@@ -64,7 +64,7 @@ const (
 	FS_CHANGE_FILE_PRIVILEGE           = "FsChangeFilePrivilege"
 	FS_MANAGE_USER_SPACE               = "FsManageUserSpace"
 	NEW_FS_MANAGE_USER_SPACE           = "NewFsManageUserSpace"
-	FS_CASH_USER_SPACE				   ="FsCashUserSpace"
+	FS_CASH_USER_SPACE                 = "FsCashUserSpace"
 	FS_GET_USER_SPACE                  = "FsGetUserSpace"
 	FS_GET_USER_SPACE_COST             = "FsGetUpdateCost"
 	FS_DELETE_USER_SPACE               = "FsDeleteUserSpace"
@@ -104,6 +104,7 @@ const (
 )
 const (
 	FS_GAS_PRICE           = 1
+	FS_GAS_LIMIT           = 20000
 	GAS_PER_GB_PER_Block   = 1
 	GAS_PER_KB_FOR_READ    = 1
 	GAS_FOR_CHALLENGE      = 200000
