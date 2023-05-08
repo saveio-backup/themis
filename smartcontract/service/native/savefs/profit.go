@@ -674,7 +674,23 @@ func deleteFiles(native *native.NativeService, fileInfos []*FileInfo) error {
 	refundAmount := uint64(0)
 	fileOwner := fileInfos[0].FileOwner
 
-	if !native.ContextRef.CheckWitness(fileOwner) {
+	expiredMax := false
+	for _, fileInfo := range fileInfos {
+		if uint64(native.Height) > fileInfo.ExpiredHeight+2*fileInfo.ProveInterval {
+			fileProveDetails, err := getProveDetails(native, fileInfo.FileHash)
+			if err != nil {
+				break
+			}
+			for _, proveDetail := range fileProveDetails.ProveDetails {
+				if native.ContextRef.CheckWitness(proveDetail.WalletAddr) {
+					expiredMax = true
+					break
+				}
+			}
+		}
+	}
+
+	if !expiredMax && !native.ContextRef.CheckWitness(fileOwner) {
 		return errors.NewErr("[FS Profit] FsDeleteFile CheckWitness failed!")
 	}
 
