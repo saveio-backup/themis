@@ -206,16 +206,16 @@ func FsSectorProve(native *native.NativeService) ([]byte, error) {
 		return utils.BYTE_FALSE, errors.NewErr("[SectorProve] getFsSettingWithProveLevel error!")
 	}
 
-	if uint64(native.Height) < sectorInfo.NextProveHeight {
-		log.Error("[SectorProve] current height %d is smaller than nextProveHeight %d!", native.Height, sectorInfo.NextProveHeight)
-		return utils.BYTE_FALSE, errors.NewErr("[SectorProve] current height is smaller than nextProveHeight!")
-	}
-
-	if sectorProve.ChallengeHeight != sectorInfo.NextProveHeight {
-		log.Errorf("[SectorProve] challengeHeight %d in sectorProve is not the nextProveHeight %d",
-			sectorProve.ChallengeHeight, sectorInfo.NextProveHeight)
-		return utils.BYTE_FALSE, errors.NewErr("[SectorProve] challengeHeight in sectorProve is not the nextProveHeight")
-	}
+	//if uint64(native.Height) < sectorInfo.NextProveHeight {
+	//	log.Error("[SectorProve] current height %d is smaller than nextProveHeight %d!", native.Height, sectorInfo.NextProveHeight)
+	//	return utils.BYTE_FALSE, errors.NewErr("[SectorProve] current height is smaller than nextProveHeight!")
+	//}
+	//
+	//if sectorProve.ChallengeHeight != sectorInfo.NextProveHeight {
+	//	log.Errorf("[SectorProve] challengeHeight %d in sectorProve is not the nextProveHeight %d",
+	//		sectorProve.ChallengeHeight, sectorInfo.NextProveHeight)
+	//	return utils.BYTE_FALSE, errors.NewErr("[SectorProve] challengeHeight in sectorProve is not the nextProveHeight")
+	//}
 
 	ret, err := checkSectorProve(native, &sectorProve, sectorInfo)
 	if err != nil {
